@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon } from 'lucide-react';
+import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon, Calendar, Info, Smartphone } from 'lucide-react';
 import { getAllUsers, updateUserRole, toggleUserBan, suspendUser, sendSystemNotification, getWordFilters, updateWordFilters, subscribeToReports, handleReport, deleteReport, getAdminSpyChats, getAdminSpyMessages, subscribeToAppeals, resolveAppeal, deleteAppeal, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, triggerSystemUpdate, wipeSystemData, deleteUserAccount, subscribeToDeletionRequests, resolveDeletionRequest, adminSendMessageAsUser, getAllGroups, forceJoinGroup, deleteChat, toggleUserMaintenance, setGlobalMaintenance, subscribeToSystemInfo } from '../services/firebaseService';
 import { UserProfileData, UserRole, Message, Report, Contact, Appeal, DeletionRequest } from '../types';
 import { CONFIG } from '../config';
@@ -83,6 +83,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
           case 'developer': return 'برنامه‌نویس';
           case 'admin': return 'ادمین';
           case 'user': return 'کاربر';
+          case 'guest': return 'مهمان';
           default: return role;
       }
   };
@@ -341,9 +342,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                             {user.isUnderMaintenance && <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500 animate-pulse"></div>}
                             
                             <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h4 className="font-bold text-gray-900 dark:text-white text-base mb-1">{user.email}</h4>
-                                    <div className="text-xs text-gray-500 font-mono mb-2">{user.uid}</div>
+                                <div className="flex-1 min-w-0 pr-4">
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-bold text-gray-900 dark:text-white text-base truncate">{user.name || 'بدون نام'}</h4>
+                                        {user.role === 'guest' && <span className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5 rounded font-bold">مهمان</span>}
+                                    </div>
+                                    <div className="text-xs text-gray-500 font-mono mb-2 truncate" title={user.uid}>{user.uid}</div>
+                                    
+                                    {/* User Details Grid */}
+                                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-gray-600 dark:text-gray-400 mb-3 bg-gray-50 dark:bg-black/20 p-2 rounded-lg">
+                                        <div className="flex items-center gap-1.5 truncate" title={user.email}>
+                                            <span className="opacity-70"><LogIn size={12}/></span>
+                                            {user.email || '-'}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 truncate" title={user.phone}>
+                                            <span className="opacity-70"><Smartphone size={12}/></span>
+                                            {user.phone || '-'}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 truncate" title={user.username}>
+                                            <span className="opacity-70">@</span>
+                                            {user.username}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 truncate" title={user.createdAt ? new Date(user.createdAt).toLocaleDateString('fa-IR') : '-'}>
+                                            <span className="opacity-70"><Calendar size={12}/></span>
+                                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString('fa-IR') : 'نامشخص'}
+                                        </div>
+                                    </div>
+                                    
                                     <div className="flex flex-wrap items-center gap-2">
                                         {user.isBanned ? (
                                             <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded text-xs font-bold">مسدود شده</span>
@@ -362,6 +387,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                                 <option value="user">کاربر</option>
                                                 <option value="admin">ادمین</option>
                                                 <option value="owner">مدیر کل</option>
+                                                <option value="guest">مهمان</option>
                                                 {currentUserRole === 'developer' && <option value="developer">برنامه‌نویس</option>}
                                             </select>
                                         ) : (
@@ -369,10 +395,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                         )}
                                     </div>
                                 </div>
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg ${user.role === 'owner' || user.role === 'developer' ? 'bg-gradient-to-br from-yellow-400 to-orange-600' : (user.role === 'admin' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-gray-400 to-gray-600')}`}>
-                                    {(user.name || 'U').charAt(0).toUpperCase()}
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0 overflow-hidden ${user.role === 'owner' || user.role === 'developer' ? 'bg-gradient-to-br from-yellow-400 to-orange-600' : (user.role === 'admin' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-gray-400 to-gray-600')}`}>
+                                    {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover"/> : (user.name || 'U').charAt(0).toUpperCase()}
                                 </div>
                             </div>
+                            
+                            {user.bio && (
+                                <div className="mb-3 text-xs text-gray-500 italic bg-gray-50 dark:bg-white/5 p-2 rounded border-l-2 border-gray-300 truncate">
+                                    {user.bio}
+                                </div>
+                            )}
                             
                             <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
                                 <div className="flex items-center gap-2 justify-between">

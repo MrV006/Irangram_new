@@ -610,6 +610,8 @@ export const subscribeToChatPin = (chatId: string, callback: (data: any) => void
 
 export const getChatId = (uid1: string, uid2: string) => {
     if (uid2 === 'saved') return `saved_${uid1}`;
+    // Ensure consistent chat ID for Gemini bot if not handled elsewhere
+    if (uid2 === 'gemini_bot') return `gemini_bot_${uid1}`;
     return [uid1, uid2].sort().join('_');
 };
 
@@ -728,6 +730,7 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     };
 
     // Only update participants for DMs to ensure the other person sees the chat
+    // CRITICAL FIX: Ensure 'saved' and 'gemini_bot' are handled properly so subscription finds them
     if (!isGroup && receiverId !== 'saved') {
          chatUpdateData.participants = arrayUnion(senderUid, receiverId);
     } else if (receiverId === 'saved') {

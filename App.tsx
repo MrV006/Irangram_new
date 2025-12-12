@@ -62,7 +62,7 @@ import { RefreshCw, Download, LogOut, Phone, Mic, MicOff, PhoneOff, Bell, AlertT
 import { CONFIG } from './config';
 
 // Short Pop Sound (Base64)
-const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 const RING_SOUND = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg";
 
 const INITIAL_CONTACTS: Contact[] = [
@@ -80,7 +80,7 @@ const INITIAL_CONTACTS: Contact[] = [
   },
   {
     id: 'gemini_bot',
-    name: 'هوش مصنوعی جمینای ✨',
+    name: 'جمنای ✨',
     avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
     status: 'online',
     bio: 'دستیار هوشمند شما (قدرت گرفته از Google Gemini)',
@@ -618,7 +618,7 @@ const App: React.FC = () => {
              unsubscribePin();
           };
       } else {
-          // Private chat
+          // Private chat (Works for Saved, Gemini, and Users)
           if (unsubscribePrivateRef.current) unsubscribePrivateRef.current();
           const chatId = getChatId(currentUser.uid, activeContactId);
           unsubscribePrivateRef.current = subscribeToPrivateChat(chatId, (msgs) => {
@@ -979,7 +979,7 @@ const App: React.FC = () => {
                         text: botResponse,
                         type: 'text',
                         senderId: 'gemini_bot'
-                     }, { name: 'هوش مصنوعی جمینای ✨', avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg' });
+                     }, { name: 'جمنای ✨', avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg' });
                  } catch (e) {
                      console.error("Gemini failed", e);
                  }
@@ -1065,6 +1065,7 @@ const App: React.FC = () => {
 
   // ... (Logout, Switch Account, Admin Chat, Avatar Click, Delete Chat, Block, Clear History, Typing, Update) - Keep existing logic
   const handleLogout = async () => { setShowExitConfirm(true); };
+  
   const handleConfirmLogout = async () => { 
       try {
           setShowExitConfirm(false); 
@@ -1072,14 +1073,39 @@ const App: React.FC = () => {
           await logoutUser(currentUser?.uid); 
       } catch (e) {
           console.error("Logout failed", e);
-          // Force reload anyway
       } finally {
-          setCurrentUser(null); 
-          window.location.reload();
+          setCurrentUser(null);
+          // FORCE RELOAD TO CLEAR STATE
+          window.location.href = window.location.origin;
       }
   }
-  const handleAddAccount = async () => { setTargetEmail(''); await logoutUser(currentUser?.uid); setCurrentUser(null); };
-  const handleSwitchAccount = async (targetUid: string) => { const account = storedAccounts.find(acc => acc.uid === targetUid); if (account) setTargetEmail(account.email); await logoutUser(currentUser?.uid); setCurrentUser(null); };
+  
+  const handleAddAccount = async () => { 
+      setTargetEmail(''); 
+      try {
+          await logoutUser(currentUser?.uid); 
+      } catch(e) {}
+      setCurrentUser(null); 
+      window.location.reload(); // Force reload to show auth
+  };
+  
+  const handleSwitchAccount = async (targetUid: string) => { 
+      const account = storedAccounts.find(acc => acc.uid === targetUid); 
+      if (account) {
+          // We save the email to local storage to pre-fill logic
+          localStorage.setItem('irangram_auth_retry_email', account.email);
+          localStorage.setItem('irangram_auth_retry_name', account.name);
+      }
+      
+      try {
+          await logoutUser(currentUser?.uid); 
+      } catch(e) {}
+      
+      setCurrentUser(null);
+      // Force reload will bring up AuthPage, which can check props or we can just let user click
+      window.location.reload(); 
+  };
+  
   const handleStartChatFromAdmin = (targetUser: UserProfileData) => { const contact: Contact = { id: targetUser.uid, name: targetUser.name, avatar: targetUser.avatar, bio: targetUser.bio, username: '@' + targetUser.username, phone: targetUser.phone, status: 'offline', type: 'user' }; handleAddContact(contact); };
   const handleAvatarClick = (senderProfile: Partial<Contact>) => { if (senderProfile.id === 'me' || senderProfile.id === currentUser?.uid) { setIsSettingsOpen(true); } else { setViewingContact({ id: senderProfile.id!, name: senderProfile.name || 'کاربر', avatar: senderProfile.avatar || '', username: '', phone: '', bio: 'کاربر ایران‌گرام', type: 'user', status: 'offline' }); } };
   const handleDeleteChat = async (targetId?: string) => { const idToDelete = targetId || activeContactId; if (!idToDelete) return; if (!confirm("آیا از حذف این گفتگو مطمئن هستید؟ این عمل غیرقابل بازگشت است.")) return; try { if (idToDelete !== 'saved' && idToDelete !== 'global_chat') { const chatId = getChatId(currentUser.uid, idToDelete); await deleteChat(chatId); } setContacts(prev => prev.filter(c => c.id !== idToDelete)); setSessions(prev => { const newSessions = { ...prev }; delete newSessions[idToDelete]; return newSessions; }); if (activeContactId === idToDelete) setActiveContactId(null); } catch (e) { console.error("Delete chat failed", e); } };
