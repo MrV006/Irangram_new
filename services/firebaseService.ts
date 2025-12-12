@@ -34,7 +34,10 @@ import {
   onAuthStateChanged,
   User,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  sendPasswordResetEmail,
+  updatePassword,
+  signInAnonymously
 } from "firebase/auth";
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
 import { CONFIG } from "../config";
@@ -67,7 +70,7 @@ export const registerUser = async (email: string, pass: string, name: string, ph
     
     let role: UserRole = 'user';
     if (email === CONFIG.OWNER_EMAIL) role = 'owner';
-    else if (email === CONFIG.DEVELOPER_EMAIL) role = 'developer';
+    else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
 
     await updateProfile(user, { displayName: name });
     if (db) {
@@ -95,7 +98,7 @@ export const loginUser = async (email: string, pass: string) => {
         const userRef = doc(db, "users", userCredential.user.uid);
         const updates: any = { status: 'online', lastSeen: serverTimestamp() };
         if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-        if (email === CONFIG.DEVELOPER_EMAIL) updates.role = 'developer';
+        if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
         await setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
     }
     return userCredential.user;
@@ -112,14 +115,14 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
         
         let role: UserRole = 'user';
         if (email === CONFIG.OWNER_EMAIL) role = 'owner';
-        else if (email === CONFIG.DEVELOPER_EMAIL) role = 'developer';
+        else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
 
         if (db) {
             const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
             
             if (!docSnap.exists()) {
-                if (isLoginMode && email !== CONFIG.OWNER_EMAIL && email !== CONFIG.DEVELOPER_EMAIL) {
+                if (isLoginMode && email !== CONFIG.OWNER_EMAIL && email !== CONFIG.DEVELOPER_EMAIL && email !== 'developer.irangram@gmail.com') {
                     await firebaseSignOut(auth);
                     localStorage.setItem('irangram_auth_error', 'user-not-found');
                     localStorage.setItem('irangram_auth_retry_email', email);
@@ -144,7 +147,7 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
             } else {
                  const updates: any = { status: 'online', lastSeen: serverTimestamp() };
                 if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-                if (email === CONFIG.DEVELOPER_EMAIL) updates.role = 'developer';
+                if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
                 await setDoc(docRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
             }
         }
@@ -155,9 +158,46 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
     }
 };
 
+export const loginAnonymously = async () => {
+    if (!auth) throw new Error("Auth service unavailable");
+    const userCredential = await signInAnonymously(auth);
+    const user = userCredential.user;
+    
+    // Create a temporary guest profile
+    if (db) {
+        const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
+        await setDoc(doc(db, "users", user.uid), {
+            name: 'کاربر مهمان',
+            email: '',
+            phone: '',
+            username: `guest_${user.uid.substring(0,6)}`,
+            bio: "اکانت موقت (فقط خواندنی)",
+            avatar: `https://ui-avatars.com/api/?name=Guest&background=ef4444&color=fff&size=128`,
+            role: 'guest',
+            isBanned: false,
+            createdAt: serverTimestamp(),
+            lastSeen: serverTimestamp(),
+            status: 'online',
+            expiresAt: expiresAt
+        });
+    }
+    return user;
+};
+
+export const sendPasswordReset = async (email: string) => {
+    if (!auth) return;
+    await sendPasswordResetEmail(auth, email);
+};
+
+export const updateUserPassword = async (newPassword: string) => {
+    if (!auth || !auth.currentUser) throw new Error("No user logged in");
+    await updatePassword(auth.currentUser, newPassword);
+};
+
 export const logoutUser = async (uid?: string) => {
     if (!auth) return;
     if (uid && db) {
+        // Only update status if not guest, or let backend handle cleanup
         await updateDoc(doc(db, "users", uid), { status: 'offline', lastSeen: serverTimestamp() }).catch(() => {});
     }
     await firebaseSignOut(auth);
@@ -174,7 +214,7 @@ export const getUserProfile = async (uid: string) => {
             const currentUser = auth?.currentUser;
             if (currentUser && currentUser.uid === uid) {
                 const email = currentUser.email;
-                if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL) {
+                if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') {
                      const role = email === CONFIG.OWNER_EMAIL ? 'owner' : 'developer';
                      const name = email === CONFIG.OWNER_EMAIL ? 'مدیر سیستم' : 'توسعه‌دهنده سیستم';
                      const newProfile = {
@@ -344,16 +384,6 @@ export const joinGroupViaLink = async (groupId: string, userId: string) => {
 export const leaveGroup = async (chatId: string, userId: string) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    const updates: any = {
-        participants: arrayRemove(userId),
-        admins: arrayRemove(userId)
-    };
-    updates[`adminPermissions.${userId}`] = deleteDoc; // Remove permission field (trick for Firestore update, actually set to FieldValue.delete())
-    // Firestore delete field syntax: updateDoc(ref, { "field": deleteField() })
-    // Using update with dot notation
-    
-    // Simplified: Just remove array items. Permission map cleanup is harder without deleteField import.
-    // Keeping permission record is harmless for now.
     await updateDoc(chatRef, {
         participants: arrayRemove(userId),
         admins: arrayRemove(userId) 
@@ -403,9 +433,6 @@ export const updateChatSlowMode = async (chatId: string, delaySeconds: number) =
 export const demoteGroupAdmin = async (chatId: string, targetUserId: string) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    // Remove from admins array
-    // Firestore doesn't easily support deleting specific map keys in updateDoc without deleteField()
-    // For now we assume if not in 'admins' array, permissions are ignored.
     await updateDoc(chatRef, {
         admins: arrayRemove(targetUserId)
     });

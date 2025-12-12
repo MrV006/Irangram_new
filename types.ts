@@ -1,5 +1,5 @@
 
-export type UserRole = 'owner' | 'admin' | 'user' | 'developer';
+export type UserRole = 'owner' | 'admin' | 'user' | 'developer' | 'guest';
 
 export interface PollOption {
     id: string;
@@ -79,6 +79,7 @@ export interface UserProfileData {
   isBanned?: boolean;
   isUnderMaintenance?: boolean; // New: Fake Maintenance Mode per user
   banExpiresAt?: number; // Timestamp for temporary ban expiration
+  expiresAt?: number; // For Guest Accounts (24h expiry)
   createdAt: any;
   lastSeen: any;
   status: string;

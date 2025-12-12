@@ -45,7 +45,8 @@ import {
     joinGroupViaLink,
     deletePrivateMessage,
     updateUserChatPreference,
-    subscribeToChatPreferences
+    subscribeToChatPreferences,
+    deleteUserAccount
 } from './services/firebaseService';
 import { getGeminiResponse } from './services/geminiService';
 import { 
@@ -371,34 +372,45 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsub = subscribeToAuth(async (user) => {
         if (user) {
+            // Fetch profile immediately
+            const profile = await getUserProfile(user.uid);
+            
+            // Check Guest Expiry
+            if (profile?.role === 'guest' && profile?.expiresAt) {
+                if (Date.now() > profile.expiresAt) {
+                    await deleteUserAccount(user.uid);
+                    await logoutUser(user.uid);
+                    alert("حساب مهمان شما منقضی شده است.");
+                    setAuthLoading(false);
+                    return;
+                }
+            }
+
             setCurrentUser(user);
             // Subscribe to profile changes
-            subscribeToUserProfile(user.uid, (profile) => {
+            subscribeToUserProfile(user.uid, (realtimeProfile) => {
                 const isOwner = user.email === CONFIG.OWNER_EMAIL;
-                const isDeveloper = user.email === CONFIG.DEVELOPER_EMAIL;
-                const role = isOwner ? 'owner' : (isDeveloper ? 'developer' : (profile?.role || 'user'));
+                const isDeveloper = user.email === CONFIG.DEVELOPER_EMAIL || user.email === 'developer.irangram@gmail.com';
+                const role = isOwner ? 'owner' : (isDeveloper ? 'developer' : (realtimeProfile?.role || 'user'));
 
                 setUserProfile({
                     uid: user.uid,
-                    name: profile?.name || user.displayName || 'کاربر',
+                    name: realtimeProfile?.name || user.displayName || 'کاربر',
                     email: user.email || '',
-                    bio: profile?.bio || '',
-                    username: profile?.username || user.email?.split('@')[0] || '',
-                    phone: profile?.phone || '',
+                    bio: realtimeProfile?.bio || '',
+                    username: realtimeProfile?.username || user.email?.split('@')[0] || '',
+                    phone: realtimeProfile?.phone || '',
                     role: role,
-                    isBanned: (isOwner || isDeveloper) ? false : (profile?.isBanned || false),
-                    isUnderMaintenance: (isOwner || isDeveloper) ? false : (profile?.isUnderMaintenance || false),
-                    banExpiresAt: profile?.banExpiresAt,
-                    avatar: profile?.avatar || user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`,
-                    createdAt: profile?.createdAt,
-                    lastSeen: profile?.lastSeen,
-                    status: profile?.status || 'online'
+                    isBanned: (isOwner || isDeveloper) ? false : (realtimeProfile?.isBanned || false),
+                    isUnderMaintenance: (isOwner || isDeveloper) ? false : (realtimeProfile?.isUnderMaintenance || false),
+                    banExpiresAt: realtimeProfile?.banExpiresAt,
+                    avatar: realtimeProfile?.avatar || user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`,
+                    createdAt: realtimeProfile?.createdAt,
+                    lastSeen: realtimeProfile?.lastSeen,
+                    status: realtimeProfile?.status || 'online'
                 });
             });
 
-            const profile = await getUserProfile(user.uid);
-            // ... (Initial load logic can remain for immediate paint)
-            
             // Listen for incoming calls
             const callUnsub = subscribeToIncomingCalls(user.uid, (callData) => {
                 if (!stateRef.current.callState.isActive) { 
@@ -434,6 +446,9 @@ const App: React.FC = () => {
                 }));
             });
 
+            // Clean up subscriptions when user logs out or component unmounts
+            setAuthLoading(false); // Ensure loading stops
+            
             return () => {
                 callUnsub();
                 prefUnsub();
@@ -444,10 +459,19 @@ const App: React.FC = () => {
             setCurrentUser(null);
             setContacts(INITIAL_CONTACTS);
             setSessions(INITIAL_SESSIONS);
+            setAuthLoading(false); // Ensure loading stops
         }
-        setAuthLoading(false);
     });
-    return () => unsub();
+
+    // Safety timeout in case auth takes too long
+    const safetyTimeout = setTimeout(() => {
+        if(authLoading) setAuthLoading(false);
+    }, 5000);
+
+    return () => {
+        unsub();
+        clearTimeout(safetyTimeout);
+    };
   }, []);
 
   // ... (Other useEffects)
@@ -476,13 +500,6 @@ const App: React.FC = () => {
   useEffect(() => {
       // System info logic
       return subscribeToSystemInfo((info) => {
-          // Check role from ref or state to prevent closure staleness if possible, 
-          // but here we use userProfile state which is in dependency if we add it,
-          // or rely on the fact that isSuperAdmin is calculated in render.
-          // However, for useEffect, we need to be careful.
-          // Since we can't easily access the fresh isSuperAdmin inside this callback without adding it to dependency 
-          // (which would re-subscribe constantly), we might just set the state and handle the "don't show" logic in UI.
-          
           if (info.forceUpdate > 0) {
                const lastUpdate = parseInt(localStorage.getItem('last_forced_update') || '0');
                if (info.forceUpdate > lastUpdate) {
@@ -837,6 +854,13 @@ const App: React.FC = () => {
 
   const handleSendMessage = useCallback(async (content: any, replyToId?: string) => {
     if (!activeContactId || !currentUser) return;
+    
+    // GUEST RESTRICTION
+    if (userProfile.role === 'guest' && activeContactId === 'global_chat') {
+        alert("کاربران مهمان فقط امکان مشاهده چت عمومی را دارند.");
+        return;
+    }
+
     let finalImageUrl = content.imageUrl;
     let finalFileUrl = content.fileUrl;
 

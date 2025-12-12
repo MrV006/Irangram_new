@@ -57,6 +57,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   
   const [showInstallModal, setShowInstallModal] = useState(false);
 
+  const isGuest = userProfile.role === 'guest';
+
   // Close context menu on click outside
   useEffect(() => {
       const handleClick = () => setContextMenu(null);
@@ -240,7 +242,10 @@ const Sidebar: React.FC<SidebarProps> = ({
              </div>
              <div className="relative z-10 cursor-pointer" onClick={() => setIsAccountsOpen(!isAccountsOpen)}>
                  <div className="flex justify-between items-center">
-                    <div className="font-bold text-lg truncate flex items-center gap-2">{userProfile.name}</div>
+                    <div className="font-bold text-lg truncate flex items-center gap-2">
+                        {userProfile.name}
+                        {isGuest && <span className="bg-yellow-500 text-black px-1.5 py-0.5 rounded text-[10px] font-bold">مهمان</span>}
+                    </div>
                     <ChevronDown size={18} className={`transition-transform duration-300 ${isAccountsOpen ? 'rotate-180' : ''}`} />
                  </div>
                  <div className="text-sm opacity-80 font-mono dir-ltr text-right mt-1">{userProfile.phone || userProfile.username}</div>
@@ -250,15 +255,19 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto py-2">
             {!isAccountsOpen ? (
                 <div className="flex flex-col animate-fade-in">
-                    <button onClick={() => { setIsCreatingChannel(false); setShowCreateGroup(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
-                        <Users size={22} className="text-gray-500" /> <span className="font-medium">گروه جدید</span>
-                    </button>
-                    <button onClick={() => { setIsCreatingChannel(true); setShowCreateGroup(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
-                        <Megaphone size={22} className="text-gray-500" /> <span className="font-medium">کانال جدید</span>
-                    </button>
-                    <button onClick={() => { setShowAddContact(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
-                        <UserPlus size={22} className="text-gray-500" /> <span className="font-medium">افزودن مخاطب</span>
-                    </button>
+                    {!isGuest && (
+                        <>
+                            <button onClick={() => { setIsCreatingChannel(false); setShowCreateGroup(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
+                                <Users size={22} className="text-gray-500" /> <span className="font-medium">گروه جدید</span>
+                            </button>
+                            <button onClick={() => { setIsCreatingChannel(true); setShowCreateGroup(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
+                                <Megaphone size={22} className="text-gray-500" /> <span className="font-medium">کانال جدید</span>
+                            </button>
+                            <button onClick={() => { setShowAddContact(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
+                                <UserPlus size={22} className="text-gray-500" /> <span className="font-medium">افزودن مخاطب</span>
+                            </button>
+                        </>
+                    )}
                     <button onClick={() => { onSelectContact('saved'); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
                         <Bookmark size={22} className="text-gray-500" /> <span className="font-medium">پیام‌های ذخیره شده</span>
                     </button>

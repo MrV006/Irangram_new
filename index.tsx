@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { Component, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 const rootElement = document.getElementById('root');
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  // Fix: Make children optional to resolve missing property error in strict usage
+  children?: ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -14,11 +15,9 @@ interface ErrorBoundaryState {
 }
 
 // Error Boundary to catch crashes and show a readable error
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Explicitly declare state property to resolve "Property 'state' does not exist" error
+  public state: ErrorBoundaryState = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };

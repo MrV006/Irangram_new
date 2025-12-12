@@ -122,6 +122,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const isGlobalChat = contact.id === 'global_chat';
   const draftKey = `draft_${myId}_${contact.id}`;
   const isSystemAdmin = myRole === 'owner' || myRole === 'developer';
+  const isGuest = myRole === 'guest';
 
   // --- Derived State for Gallery ---
   const chatImages = useMemo(() => {
@@ -140,6 +141,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               setMyPermissions({ canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: true });
               return;
           }
+
+          if (isGuest && isGlobalChat) {
+              setCanWrite(false);
+              setCanPin(false);
+              return;
+          }
+
           if ((isChannel || isGroup) && !isGlobalChat) {
               // Check if user is creator
               const isCreator = contact.creatorId === myId;
@@ -174,7 +182,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           }
       };
       checkPermissions();
-  }, [contact, myId, myRole, isChannel, isGroup, isSystemAdmin]);
+  }, [contact, myId, myRole, isChannel, isGroup, isSystemAdmin, isGuest, isGlobalChat]);
 
   useEffect(() => {
      const checkBlock = async () => {
@@ -868,8 +876,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <div className="w-full py-4 text-center text-gray-500 text-sm">امکان ارسال پیام وجود ندارد.</div>
             ) : !canWrite ? (
                 <div className="w-full py-3 flex items-center justify-center gap-2 text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5 select-none cursor-default">
-                     <Megaphone size={18} />
-                     <span className="text-sm">فقط مدیران می‌توانند در این کانال پیام ارسال کنند.</span>
+                     {isGuest && isGlobalChat ? (
+                        <>
+                            <Shield size={18} />
+                            <span className="text-sm">کاربر مهمان فقط امکان مشاهده چت عمومی را دارد.</span>
+                        </>
+                     ) : (
+                        <>
+                            <Megaphone size={18} />
+                            <span className="text-sm">فقط مدیران می‌توانند در این کانال پیام ارسال کنند.</span>
+                        </>
+                     )}
                 </div>
             ) : (
                 <div className="flex items-end gap-2 max-w-4xl mx-auto transition-all">

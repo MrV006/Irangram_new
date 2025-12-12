@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Lock, Mail, Phone, ArrowRight, Loader2, AlertCircle, Users, Plus, X, Github, Smartphone } from 'lucide-react';
-import { registerUser, loginUser, loginWithGoogle } from '../services/firebaseService';
+import { User, Lock, Mail, Phone, ArrowRight, Loader2, AlertCircle, Users, Plus, X, Github, Smartphone, Eye, Key, UserCheck } from 'lucide-react';
+import { registerUser, loginUser, loginWithGoogle, sendPasswordReset, loginAnonymously } from '../services/firebaseService';
 import { StoredAccount } from '../types';
 import { CONFIG } from '../config';
 
@@ -15,7 +15,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [showAccountChooser, setShowAccountChooser] = useState(storedAccounts.length > 0 && !initialEmail);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -56,6 +59,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true);
 
     try {
@@ -70,6 +74,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     } catch (err: any) {
       console.error(err);
       
+      // Auto-switch logic
+      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && isLogin) {
+           setIsLogin(false); // Switch to signup
+           setError('حساب کاربری با این مشخصات یافت نشد. به صفحه ثبت‌نام منتقل شدید. لطفاً اطلاعات را تکمیل کنید.');
+           setLoading(false);
+           return;
+      }
+
       if (err.code === 'auth/email-already-in-use') {
           setIsLogin(true); // Auto switch to login
           if (formData.email === CONFIG.OWNER_EMAIL) {
@@ -78,15 +90,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
               setError('این ایمیل قبلا ثبت شده است. سیستم شما را به حالت "ورود" برد. رمز خود را وارد کنید.');
           }
       }
-      else if ((err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') && formData.email === CONFIG.OWNER_EMAIL) {
-           if (isLogin) {
-               setError('رمز عبور اشتباه است یا حساب مشکل دارد. لطفاً از دکمه "ورود با حساب گوگل" استفاده کنید.');
-           } else {
-               setError('خطا در احراز هویت.');
-           }
+      else if (err.code === 'auth/wrong-password' && formData.email === CONFIG.OWNER_EMAIL) {
+           setError('رمز عبور اشتباه است یا حساب مشکل دارد. لطفاً از دکمه "ورود با حساب گوگل" استفاده کنید.');
       } 
       else if (err.code === 'auth/invalid-email') setError('فرمت ایمیل نامعتبر است');
-      else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') setError('ایمیل یا رمز عبور اشتباه است');
       else if (err.code === 'auth/too-many-requests') setError('تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً چند دقیقه صبر کنید.');
       else if (err.code === 'auth/network-request-failed') setError('خطا در اتصال به اینترنت. لطفاً اتصال خود را بررسی کنید.');
       else setError(err.message || 'خطایی رخ داد. لطفا دوباره تلاش کنید.');
@@ -122,6 +129,38 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     }
   };
 
+  const handleGuestLogin = async () => {
+      setLoading(true);
+      setError('');
+      try {
+          await loginAnonymously();
+      } catch (e: any) {
+          setError('خطا در ورود مهمان. لطفا دوباره تلاش کنید.');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!resetEmail) {
+          setError('لطفا ایمیل خود را وارد کنید.');
+          return;
+      }
+      setLoading(true);
+      try {
+          await sendPasswordReset(resetEmail);
+          setSuccessMsg('لینک بازیابی رمز عبور به ایمیل شما ارسال شد.');
+          setShowForgotPassword(false);
+          setResetEmail('');
+      } catch (e: any) {
+          if (e.code === 'auth/user-not-found') setError('کاربری با این ایمیل یافت نشد.');
+          else setError('خطا در ارسال ایمیل بازیابی.');
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const handleAccountSelect = (account: StoredAccount) => {
       setFormData(prev => ({ ...prev, email: account.email }));
       setShowAccountChooser(false);
@@ -148,6 +187,36 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
           </div>
       </div>
   );
+
+  if (showForgotPassword) {
+      return (
+        <div className="min-h-[100dvh] w-full flex flex-col items-center bg-telegram-bg dark:bg-telegram-bgDark p-4 relative overflow-y-auto">
+            <div className="absolute inset-0 opacity-10 chat-bg-pattern pointer-events-none fixed"></div>
+            <div className="w-full flex-1 flex flex-col items-center justify-center z-10 py-10">
+                <div className="w-full max-w-md bg-white dark:bg-telegram-secondaryDark rounded-3xl shadow-2xl p-8 animate-fade-in relative">
+                    <button onClick={() => setShowForgotPassword(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                    <div className="text-center mb-6">
+                        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full mx-auto flex items-center justify-center mb-4">
+                            <Key size={32} />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">بازیابی رمز عبور</h2>
+                        <p className="text-sm text-gray-500 mt-2">ایمیل خود را وارد کنید تا لینک بازیابی ارسال شود.</p>
+                    </div>
+                    {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>}
+                    <form onSubmit={handleForgotPassword} className="space-y-4">
+                        <div className="relative group">
+                            <Mail className="absolute right-3 top-3 text-gray-400" size={20} />
+                            <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="ایمیل شما" className="w-full bg-gray-100 dark:bg-white/5 rounded-xl py-3 pr-10 pl-4 outline-none text-gray-900 dark:text-white dir-ltr text-right" required />
+                        </div>
+                        <button type="submit" disabled={loading} className="w-full bg-telegram-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                             {loading ? <Loader2 className="animate-spin" /> : 'ارسال لینک'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+      );
+  }
 
   if (showAccountChooser && storedAccounts.length > 0) {
       return (
@@ -214,6 +283,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
                     <span className="leading-relaxed">{error}</span>
                 </div>
             )}
+            {successMsg && (
+                <div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-lg flex items-start gap-2 text-right dir-rtl border border-green-100 dark:border-green-900/30" dir="rtl">
+                    <UserCheck size={16} className="mt-0.5 shrink-0" />
+                    <span className="leading-relaxed">{successMsg}</span>
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 {!isLogin && (
@@ -239,6 +314,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
                     <input type="password" name="password" autoComplete={isLogin ? "current-password" : "new-password"} placeholder="رمز عبور" className="w-full bg-gray-100 dark:bg-white/5 border border-transparent focus:bg-white dark:focus:bg-black/20 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white dir-ltr text-right font-medium placeholder:font-normal" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
                 </div>
 
+                {isLogin && (
+                    <div className="text-left">
+                        <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-telegram-primary hover:underline">فراموشی رمز عبور؟</button>
+                    </div>
+                )}
+
                 <button type="submit" disabled={loading} className="w-full bg-telegram-primary hover:bg-telegram-primaryDark text-white font-bold py-3 rounded-xl shadow-lg shadow-telegram-primary/30 flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed mt-6">
                     {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'ورود' : 'ثبت نام')}
                     {!loading && <ArrowRight size={20} className="rotate-180" />}
@@ -249,11 +330,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-white/10"></div></div>
                 <div className="relative flex justify-center text-sm"><span className="px-2 bg-white dark:bg-telegram-secondaryDark text-gray-500">یا</span></div>
             </div>
+            
+            <div className="space-y-3">
+                <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                    ورود با حساب گوگل
+                </button>
 
-            <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                ورود با حساب گوگل
-            </button>
+                <button type="button" onClick={handleGuestLogin} disabled={loading} className="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors text-sm">
+                    <Eye size={18} />
+                    ورود به عنوان مهمان (فقط مشاهده)
+                </button>
+            </div>
 
             <div className="mt-6 text-center">
                 <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="text-telegram-primary hover:underline text-sm font-medium">
