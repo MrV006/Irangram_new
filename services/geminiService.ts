@@ -1,15 +1,31 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Message } from "../types";
 
 // Initialize the Gemini AI client with the API key from environment variables.
-// The API key must be obtained exclusively from process.env.API_KEY.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Use lazy initialization or safe check to prevent app crash if key is missing.
+let ai: GoogleGenAI | null = null;
+
+try {
+    const apiKey = process.env.API_KEY;
+    if (apiKey) {
+        ai = new GoogleGenAI({ apiKey: apiKey });
+    } else {
+        console.warn("Gemini API Key is missing. AI features will be disabled.");
+    }
+} catch (error) {
+    console.error("Failed to initialize Gemini AI:", error);
+}
 
 export const getGeminiResponse = async (
   contactId: string, 
   userMessage: string, 
   history: Message[]
 ): Promise<string> => {
+  if (!ai) {
+      return "سرویس هوش مصنوعی در حال حاضر فعال نیست (کلید API یافت نشد). لطفا با مدیر تماس بگیرید.";
+  }
+
   try {
     // Format the conversation history for the model
     // We filter for text messages and format them to provide context
