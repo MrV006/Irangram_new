@@ -43,7 +43,9 @@ try {
             firestoreSettings = {
                 ...firestoreSettings,
                 host: proxyUrl.host,
-                ssl: true
+                ssl: true,
+                experimentalForceLongPolling: true, // Force long polling to bypass blocking/instability through proxy
+                ignoreUndefinedProperties: true
             };
             console.log("Using Firestore Proxy:", proxyUrl.host);
         } catch (e) {

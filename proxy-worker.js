@@ -14,7 +14,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-goog-request-params, x-goog-api-client, x-firebase-storage-version',
+          'Access-Control-Allow-Headers': '*', // Allow all headers to prevent CORS errors with Firestore SDK
           'Access-Control-Max-Age': '86400',
         },
       });
