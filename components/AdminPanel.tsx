@@ -370,7 +370,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                     </div>
                                 </div>
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg ${user.role === 'owner' || user.role === 'developer' ? 'bg-gradient-to-br from-yellow-400 to-orange-600' : (user.role === 'admin' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-gray-400 to-gray-600')}`}>
-                                    {user.name.charAt(0).toUpperCase()}
+                                    {(user.name || 'U').charAt(0).toUpperCase()}
                                 </div>
                             </div>
                             
@@ -380,7 +380,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                         {(isSuperAdmin || (currentUserRole === 'admin' && user.role === 'user')) && (
                                             <>
                                                 <button 
-                                                    onClick={() => { setSpyModal({ isOpen: true, targetUid: user.uid, targetName: user.name }); setSpyChats([]); setActiveSpyChat(null); getAdminSpyChats(user.uid).then(setSpyChats); }}
+                                                    onClick={() => { setSpyModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' }); setSpyChats([]); setActiveSpyChat(null); getAdminSpyChats(user.uid).then(setSpyChats); }}
                                                     className="p-2.5 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded-xl transition-all" title="نظارت (Spy)"
                                                 >
                                                     <Eye size={18} />
@@ -392,7 +392,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                                     <MessageSquare size={18} />
                                                 </button>
                                                 <button 
-                                                    onClick={() => setNotifModal({ isOpen: true, targetUid: user.uid, targetName: user.name })}
+                                                    onClick={() => setNotifModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' })}
                                                     className="p-2.5 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all" title="ارسال اعلان"
                                                 >
                                                     <Bell size={18} />

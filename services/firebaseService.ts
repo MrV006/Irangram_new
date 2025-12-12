@@ -196,9 +196,13 @@ export const updateUserPassword = async (newPassword: string) => {
 
 export const logoutUser = async (uid?: string) => {
     if (!auth) return;
+    // Attempt to set status offline, but don't block signout if it fails
     if (uid && db) {
-        // Only update status if not guest, or let backend handle cleanup
-        await updateDoc(doc(db, "users", uid), { status: 'offline', lastSeen: serverTimestamp() }).catch(() => {});
+        try {
+            await updateDoc(doc(db, "users", uid), { status: 'offline', lastSeen: serverTimestamp() });
+        } catch (e) {
+            console.warn("Could not update status to offline", e);
+        }
     }
     await firebaseSignOut(auth);
 };
@@ -251,7 +255,6 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
 // --- CHAT PREFERENCES (PIN/ARCHIVE) ---
 export const updateUserChatPreference = async (uid: string, contactId: string, updates: { isPinned?: boolean; isArchived?: boolean }) => {
     if (!db) return;
-    // We store preferences in a sub-collection 'preferences' under the user
     const prefRef = doc(db, "users", uid, "chat_preferences", contactId);
     try {
         await setDoc(prefRef, updates, { merge: true });
@@ -690,11 +693,25 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
         return;
     }
 
+    // Ensure we handle 'saved' messages and Gemini bot correctly in participants array
     const participants = receiverId === 'saved' ? [senderUid] : [senderUid, receiverId];
 
-    await setDoc(chatRef, { participants, updatedAt: serverTimestamp(), lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), lastSenderId: senderUid }, { merge: true });
+    // Use setDoc with merge to ensure document exists without overwriting unrelated fields
+    await setDoc(chatRef, { 
+        participants, 
+        updatedAt: serverTimestamp(), 
+        lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
+        lastSenderId: senderUid 
+    }, { merge: true });
+    
     const safeMessage = sanitizeData(message);
-    await addDoc(collection(db, "chats", chatId, "messages"), { ...safeMessage, senderName: userProfile.name, senderAvatar: userProfile.avatar || '', createdAt: serverTimestamp(), reactions: {} });
+    await addDoc(collection(db, "chats", chatId, "messages"), { 
+        ...safeMessage, 
+        senderName: userProfile.name, 
+        senderAvatar: userProfile.avatar || '', 
+        createdAt: serverTimestamp(), 
+        reactions: {} 
+    });
 };
 
 // --- POLLS ---
@@ -904,7 +921,18 @@ export const sendReport = async (messageId: string, messageContent: string, repo
 export const subscribeToReports = (callback: (reports: Report[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "reports"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const reports = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), handledAt: data.handledAt ? (data.handledAt as Timestamp).toMillis() : undefined } as Report; }); callback(reports); }); };
 export const handleReport = async (reportId: string, adminName: string) => { if (!db) return; await updateDoc(doc(db, "reports", reportId), { status: 'handled', handledBy: adminName, handledAt: serverTimestamp() }); };
 export const deleteReport = async (reportId: string) => { if (!db) return; await deleteDoc(doc(db, "reports", reportId)); };
-export const getAllUsers = async () => { if (!db) return []; try { const q = query(collection(db, "users"), orderBy("createdAt", "desc")); const snapshot = await getDocs(q); return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData)); } catch (e) { console.error("Error fetching users", e); return []; } };
+export const getAllUsers = async () => { 
+    if (!db) return []; 
+    try { 
+        // Removed orderBy("createdAt", "desc") to fix admin panel "missing index" error which results in empty list
+        const q = query(collection(db, "users")); 
+        const snapshot = await getDocs(q); 
+        return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData)); 
+    } catch (e) { 
+        console.error("Error fetching users", e); 
+        return []; 
+    } 
+};
 export const updateUserRole = async (targetUid: string, newRole: UserRole) => { if (!db) return; await updateDoc(doc(db, "users", targetUid), { role: newRole }); };
 export const toggleUserBan = async (targetUid: string, currentBanStatus: boolean) => { if (!db) return; const docRef = doc(db, "users", targetUid); if (currentBanStatus) await updateDoc(docRef, { isBanned: false, banExpiresAt: null }); else await updateDoc(docRef, { isBanned: true }); };
 export const toggleUserMaintenance = async (targetUid: string, status: boolean) => { if(!db) return; await updateDoc(doc(db, "users", targetUid), { isUnderMaintenance: status }); };

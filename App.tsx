@@ -60,7 +60,7 @@ import { RefreshCw, Download, LogOut, Phone, Mic, MicOff, PhoneOff, Bell, AlertT
 import { CONFIG } from './config';
 
 // Short Pop Sound (Base64)
-const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 const RING_SOUND = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg";
 
 const INITIAL_CONTACTS: Contact[] = [
@@ -372,21 +372,22 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsub = subscribeToAuth(async (user) => {
         if (user) {
-            // Fetch profile immediately
-            const profile = await getUserProfile(user.uid);
-            
-            // Check Guest Expiry
-            if (profile?.role === 'guest' && profile?.expiresAt) {
-                if (Date.now() > profile.expiresAt) {
-                    await deleteUserAccount(user.uid);
-                    await logoutUser(user.uid);
-                    alert("حساب مهمان شما منقضی شده است.");
-                    setAuthLoading(false);
-                    return;
-                }
-            }
-
+            // OPTIMIZATION: Set current user immediately to unblock UI
             setCurrentUser(user);
+            setAuthLoading(false); // Enable UI interaction immediately
+
+            // Fetch profile in background
+            getUserProfile(user.uid).then((profile) => {
+                if(profile?.role === 'guest' && profile?.expiresAt) {
+                    if (Date.now() > profile.expiresAt) {
+                        deleteUserAccount(user.uid);
+                        logoutUser(user.uid);
+                        alert("حساب مهمان شما منقضی شده است.");
+                        return;
+                    }
+                }
+            });
+
             // Subscribe to profile changes
             subscribeToUserProfile(user.uid, (realtimeProfile) => {
                 const isOwner = user.email === CONFIG.OWNER_EMAIL;
@@ -446,9 +447,6 @@ const App: React.FC = () => {
                 }));
             });
 
-            // Clean up subscriptions when user logs out or component unmounts
-            setAuthLoading(false); // Ensure loading stops
-            
             return () => {
                 callUnsub();
                 prefUnsub();
@@ -882,74 +880,89 @@ const App: React.FC = () => {
          const chatId = getChatId(currentUser.uid, activeContactId);
          
          // 1. Send user message
-         await sendPrivateMessage(chatId, activeContactId, {
-            text: content.text,
-            type: content.type,
-            imageUrl: finalImageUrl,
-            fileUrl: finalFileUrl,
-            fileName: content.fileName,
-            fileSize: content.fileSize,
-            audioDuration: content.audioDuration,
-            isSticker: content.isSticker,
-            replyToId,
-            senderId: currentUser.uid,
-            forwardedFrom: content.forwardedFrom
-        }, { name: userProfile.name, avatar: userProfile.avatar });
+         try {
+             await sendPrivateMessage(chatId, activeContactId, {
+                text: content.text,
+                type: content.type,
+                imageUrl: finalImageUrl,
+                fileUrl: finalFileUrl,
+                fileName: content.fileName,
+                fileSize: content.fileSize,
+                audioDuration: content.audioDuration,
+                isSticker: content.isSticker,
+                replyToId,
+                senderId: currentUser.uid,
+                forwardedFrom: content.forwardedFrom
+            }, { name: userProfile.name, avatar: userProfile.avatar });
 
-        // 2. Trigger Gemini if text
-        if (content.type === 'text' && content.text) {
-             const currentHistory = sessions[activeContactId]?.messages || [];
-             
-             try {
-                 const botResponse = await getGeminiResponse(activeContactId, content.text, currentHistory);
+            // 2. Trigger Gemini if text
+            if (content.type === 'text' && content.text) {
+                 const currentHistory = sessions[activeContactId]?.messages || [];
                  
-                 // 3. Send Bot Response
-                 await sendPrivateMessage(chatId, activeContactId, {
-                    text: botResponse,
-                    type: 'text',
-                    senderId: 'gemini_bot'
-                 }, { name: 'هوش مصنوعی جمینای ✨', avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg' });
-             } catch (e) {
-                 console.error(e);
-             }
-        }
+                 try {
+                     const botResponse = await getGeminiResponse(activeContactId, content.text, currentHistory);
+                     
+                     // 3. Send Bot Response
+                     await sendPrivateMessage(chatId, activeContactId, {
+                        text: botResponse,
+                        type: 'text',
+                        senderId: 'gemini_bot'
+                     }, { name: 'هوش مصنوعی جمینای ✨', avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg' });
+                 } catch (e) {
+                     console.error("Gemini failed", e);
+                 }
+            }
+         } catch(e) {
+             console.error("Failed to send to Gemini", e);
+             alert("خطا در ارسال پیام به هوش مصنوعی.");
+         }
         return;
     }
 
     if (activeContactId === 'global_chat') {
         const avatarToSend = userProfile.name ? `https://ui-avatars.com/api/?name=${userProfile.name}&background=random&color=fff&size=64` : '';
-        await sendGlobalMessage({
-            text: content.text,
-            type: content.type,
-            imageUrl: finalImageUrl,
-            fileUrl: finalFileUrl,
-            fileName: content.fileName,
-            fileSize: content.fileSize,
-            audioDuration: content.audioDuration,
-            isSticker: content.isSticker,
-            replyToId,
-            senderId: currentUser.uid,
-            forwardedFrom: content.forwardedFrom
-        }, { name: userProfile.name, avatar: avatarToSend, role: userProfile.role }); 
+        try {
+            await sendGlobalMessage({
+                text: content.text,
+                type: content.type,
+                imageUrl: finalImageUrl,
+                fileUrl: finalFileUrl,
+                fileName: content.fileName,
+                fileSize: content.fileSize,
+                audioDuration: content.audioDuration,
+                isSticker: content.isSticker,
+                replyToId,
+                senderId: currentUser.uid,
+                forwardedFrom: content.forwardedFrom
+            }, { name: userProfile.name, avatar: avatarToSend, role: userProfile.role }); 
+        } catch(e) {
+            console.error("Global msg failed", e);
+            alert("خطا در ارسال پیام عمومی.");
+        }
         return;
     }
 
     const isReserved = activeContactId === 'global_chat';
     if (!isReserved) {
         const chatId = getChatId(currentUser.uid, activeContactId);
-        await sendPrivateMessage(chatId, activeContactId, {
-            text: content.text,
-            type: content.type,
-            senderId: currentUser.uid,
-            imageUrl: finalImageUrl,
-            fileUrl: finalFileUrl,
-            fileName: content.fileName,
-            fileSize: content.fileSize,
-            audioDuration: content.audioDuration,
-            isSticker: content.isSticker,
-            replyToId,
-            forwardedFrom: content.forwardedFrom
-        }, { name: userProfile.name, avatar: userProfile.avatar });
+        try {
+            await sendPrivateMessage(chatId, activeContactId, {
+                text: content.text,
+                type: content.type,
+                senderId: currentUser.uid,
+                imageUrl: finalImageUrl,
+                fileUrl: finalFileUrl,
+                fileName: content.fileName,
+                fileSize: content.fileSize,
+                audioDuration: content.audioDuration,
+                isSticker: content.isSticker,
+                replyToId,
+                forwardedFrom: content.forwardedFrom
+            }, { name: userProfile.name, avatar: userProfile.avatar });
+        } catch(e) {
+            console.error("Private msg failed", e);
+            alert("خطا در ارسال پیام خصوصی.");
+        }
         return;
     }
   }, [activeContactId, currentUser, userProfile, contacts, sessions]);
@@ -985,6 +998,7 @@ const App: React.FC = () => {
           await logoutUser(currentUser?.uid); 
       } catch (e) {
           console.error("Logout failed", e);
+          // Force reload anyway
       } finally {
           setCurrentUser(null); 
           window.location.reload();

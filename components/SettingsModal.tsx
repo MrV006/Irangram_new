@@ -203,7 +203,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                                     formData.avatar ? (
                                         <img src={formData.avatar} alt="Profile" className="w-full h-full object-cover" />
                                     ) : (
-                                        formData.name.charAt(0)
+                                        (formData.name || 'U').charAt(0)
                                     )
                                 )}
                             </div>
