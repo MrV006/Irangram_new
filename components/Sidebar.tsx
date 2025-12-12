@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen } from 'lucide-react';
+import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff } from 'lucide-react';
 import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount } from '../types';
 import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus } from '../services/firebaseService';
 
@@ -35,6 +35,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeFolder, setActiveFolder] = useState<FolderType>('all');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, contactId: string } | null>(null);
 
@@ -58,6 +59,18 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [showInstallModal, setShowInstallModal] = useState(false);
 
   const isGuest = userProfile.role === 'guest';
+
+  // Network Status Listener
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -207,6 +220,15 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-telegram-secondaryDark border-l border-gray-200 dark:border-telegram-borderDark relative">
+      
+      {/* Connection Status Bar */}
+      {!isOnline && (
+        <div className="bg-gray-500/90 text-white text-xs py-1 text-center font-bold flex items-center justify-center gap-2 animate-pulse transition-all">
+            <Loader2 size={12} className="animate-spin" />
+            <span>در حال اتصال...</span>
+        </div>
+      )}
+
       {/* Install Help Modal */}
       {showInstallModal && (
           <div className="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowInstallModal(false)}>

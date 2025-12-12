@@ -14,7 +14,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers': '*', // Allow all headers to prevent CORS errors with Firestore SDK
+          'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || 'Content-Type, Authorization, x-goog-api-client, x-goog-request-params, x-firebase-gmpid, x-firebase-client, x-requested-with',
           'Access-Control-Max-Age': '86400',
         },
       });
@@ -54,7 +54,7 @@ export default {
       redirect: 'follow'
     });
 
-    newRequest.headers.set('Host', new URL(targetUrl).hostname);
+    // Note: 'Host' header is automatically managed by Cloudflare Workers fetch
     
     try {
       const response = await fetch(newRequest);
@@ -63,12 +63,16 @@ export default {
       newResponse.headers.set('Access-Control-Allow-Origin', '*');
       newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
       newResponse.headers.set('Access-Control-Allow-Headers', '*');
+      newResponse.headers.set('Access-Control-Expose-Headers', '*');
       
       return newResponse;
     } catch (e) {
       return new Response(JSON.stringify({ error: e.message }), { 
         status: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' }
+        headers: { 
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+        }
       });
     }
   },
