@@ -11,6 +11,11 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     // Use './' to ensure assets are loaded correctly regardless of the domain
     base: './', 
+    resolve: {
+      alias: {
+        '@': '.',
+      },
+    },
     define: {
       // Polyfill process.env.API_KEY for the browser
       'process.env.API_KEY': JSON.stringify(env.API_KEY)

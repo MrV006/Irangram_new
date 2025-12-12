@@ -9,7 +9,7 @@ import AuthPage from './components/AuthPage';
 import BanScreen from './components/BanScreen';
 import ForwardModal from './components/ForwardModal';
 import CallModal from './components/CallModal';
-import { Contact, ChatSession, Message, Theme, UserRole, UserProfileData, StoredAccount } from './types';
+import { Contact, ChatSession, Message, Theme, UserRole, UserProfileData, StoredAccount, IncomingCall } from './types';
 import { 
     subscribeToGlobalChat, 
     sendGlobalMessage, 
@@ -40,6 +40,7 @@ import {
     editPrivateMessage,
     deleteChat,
     clearPrivateChatHistory,
+    clearGlobalChat,
     blockUser,
     setUserTyping,
     joinGroupViaLink,

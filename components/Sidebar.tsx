@@ -111,14 +111,32 @@ const Sidebar: React.FC<SidebarProps> = ({
       setIsMenuOpen(false);
   };
 
-  const handleClearCache = () => {
+  const handleClearCache = async () => {
       if (confirm("آیا از پاکسازی حافظه موقت مطمئن هستید؟ این کار باعث رفرش شدن برنامه می‌شود.")) {
           // Clear only cache, keeping user session if possible or force reload
+          if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              for (const registration of registrations) {
+                  await registration.unregister();
+              }
+          }
+          if ('caches' in window) {
+              const keys = await caches.keys();
+              for (const key of keys) {
+                  await caches.delete(key);
+              }
+          }
           window.location.reload(); 
       }
   };
 
-  const handleManualUpdate = () => {
+  const handleManualUpdate = async () => {
+      if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+              await registration.unregister();
+          }
+      }
       window.location.reload();
   };
 
