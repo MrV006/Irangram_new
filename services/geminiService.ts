@@ -1,6 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { Message } from "../types";
+import { CONFIG } from "../config";
 
 // Initialize the Gemini AI client with the API key from environment variables.
 // Use lazy initialization or safe check to prevent app crash if key is missing.
@@ -9,7 +10,18 @@ let ai: GoogleGenAI | null = null;
 try {
     const apiKey = process.env.API_KEY;
     if (apiKey) {
-        ai = new GoogleGenAI({ apiKey: apiKey });
+        // IMPORTANT: Use the proxy URL as the baseUrl to bypass filtering in Iran
+        // We strip the trailing slash if present
+        const proxyBaseUrl = CONFIG.CLOUDFLARE_PROXY_URL 
+            ? CONFIG.CLOUDFLARE_PROXY_URL.replace(/\/$/, '') 
+            : undefined;
+
+        ai = new GoogleGenAI({ 
+            apiKey: apiKey,
+            // If Proxy is set, route requests through it. 
+            // The worker must handle 'generativelanguage.googleapis.com' traffic.
+            baseUrl: proxyBaseUrl 
+        });
     } else {
         console.warn("Gemini API Key is missing. AI features will be disabled.");
     }
@@ -49,7 +61,7 @@ export const getGeminiResponse = async (
     return response.text || "متاسفم، پاسخی دریافت نشد.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "سرویس هوش مصنوعی در حال حاضر در دسترس نیست. لطفا بعدا تلاش کنید.";
+    return "سرویس هوش مصنوعی در حال حاضر در دسترس نیست (خطای اتصال). لطفا اتصال اینترنت خود را بررسی کنید.";
   }
 };
 

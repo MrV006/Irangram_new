@@ -99,25 +99,33 @@ export const getCurrentUser = () => {
 };
 
 export const subscribeToAuth = (callback: (user: any | null) => void) => {
-    // 1. Check if we have a proxy user already (for immediate render)
+    // 1. IMMEDIATE PRIORITY: Check LocalStorage for Proxy User
+    // This bypasses the initial network check of the SDK which often fails in Iran.
     const proxyUser = getProxyUser();
+    let hasReturnedProxyUser = false;
+
     if (proxyUser) {
         // Create a mock user object compatible with Firebase User
         const mockUser = { uid: proxyUser.localId, email: proxyUser.email, displayName: proxyUser.displayName || 'User' };
         callback(mockUser);
+        hasReturnedProxyUser = true;
     }
 
     if (!auth) {
-        if (!proxyUser) callback(null);
+        if (!hasReturnedProxyUser) callback(null);
         return () => {};
     }
 
-    // 2. Listen to real SDK (updates override local if connection works)
+    // 2. Listen to real SDK
+    // If connection succeeds, this will trigger and might update the user state.
+    // If connection fails (blocked), we rely on the step 1 above.
     return onAuthStateChanged(auth, (user) => {
         if (user) {
             callback(user);
         } else {
-            // If SDK says no user, check if we have a manual proxy session
+            // SDK says no user (signed out or init state)
+            // If we haven't already returned the proxy user, do it now.
+            // But if we have a proxy user locally, stick with it unless explicitly signed out.
             const stored = getProxyUser();
             if (stored) {
                 callback({ uid: stored.localId, email: stored.email, displayName: stored.displayName || 'User' });
@@ -150,7 +158,8 @@ export const registerUser = async (email: string, pass: string, name: string, ph
             if (email === CONFIG.OWNER_EMAIL) role = 'owner';
             else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
 
-            await setDoc(doc(db, "users", data.localId), {
+            // Fire and forget profile creation to avoid UI lag
+            setDoc(doc(db, "users", data.localId), {
                 name: name,
                 email: email,
                 phone: phone,
@@ -162,7 +171,7 @@ export const registerUser = async (email: string, pass: string, name: string, ph
                 createdAt: serverTimestamp(),
                 lastSeen: serverTimestamp(),
                 status: 'online'
-            });
+            }).catch(e => console.error("Profile creation sync warning:", e));
         }
         return { uid: data.localId, ...userData };
 
@@ -172,6 +181,13 @@ export const registerUser = async (email: string, pass: string, name: string, ph
         if (!auth) throw new Error("Auth unavailable");
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
         await updateProfile(cred.user, { displayName: name });
+        // After SDK success, save proxy user to cache it for next reload
+        saveProxyUser({ 
+            localId: cred.user.uid, 
+            email: cred.user.email, 
+            displayName: name,
+            idToken: await cred.user.getIdToken() 
+        });
         return cred.user;
     }
 };
@@ -197,7 +213,7 @@ export const loginUser = async (email: string, pass: string) => {
             const updates: any = { status: 'online', lastSeen: serverTimestamp() };
             if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
             if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
-            await setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
+            setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update warning", e));
         }
         return { uid: data.localId, ...data };
 
@@ -205,6 +221,13 @@ export const loginUser = async (email: string, pass: string) => {
         console.warn("Proxy login failed, trying SDK...", e);
         if (auth) {
             const cred = await signInWithEmailAndPassword(auth, email, pass);
+            // Save proxy user for future caching
+             saveProxyUser({ 
+                localId: cred.user.uid, 
+                email: cred.user.email, 
+                displayName: cred.user.displayName,
+                idToken: await cred.user.getIdToken() 
+            });
             return cred.user;
         }
         throw e;
@@ -369,8 +392,9 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
                         lastSeen: serverTimestamp(),
                         status: 'online'
                      };
+                     // Don't await this to keep UI fast
                      const { uid: _, ...profileToSave } = newProfile;
-                     await setDoc(docRef, profileToSave);
+                     setDoc(docRef, profileToSave).catch(e => console.error("Auto-profile create warning:", e));
                      return newProfile;
                 }
             }
