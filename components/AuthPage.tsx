@@ -74,10 +74,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     } catch (err: any) {
       console.error(err);
       
-      // Auto-switch logic
-      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && isLogin) {
+      // Explicitly handle invalid-credential (wrong password or user not found with protection enabled)
+      // We do NOT auto-switch to signup here to avoid confusing users who just made a typo.
+      if (err.code === 'auth/invalid-credential' && isLogin) {
+           setError('ایمیل یا رمز عبور اشتباه است.');
+           setLoading(false);
+           return;
+      }
+
+      // Handle explicit user-not-found (if enumeration protection is off or differently handled)
+      if (err.code === 'auth/user-not-found' && isLogin) {
            setIsLogin(false); // Switch to signup
-           setError('حساب کاربری با این مشخصات یافت نشد. به صفحه ثبت‌نام منتقل شدید. لطفاً اطلاعات را تکمیل کنید.');
+           setError('حساب کاربری با این ایمیل یافت نشد. فرم زیر را برای ثبت‌نام پر کنید.');
            setLoading(false);
            return;
       }
@@ -90,8 +98,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
               setError('این ایمیل قبلا ثبت شده است. سیستم شما را به حالت "ورود" برد. رمز خود را وارد کنید.');
           }
       }
-      else if (err.code === 'auth/wrong-password' && formData.email === CONFIG.OWNER_EMAIL) {
-           setError('رمز عبور اشتباه است یا حساب مشکل دارد. لطفاً از دکمه "ورود با حساب گوگل" استفاده کنید.');
+      else if (err.code === 'auth/wrong-password') {
+           setError('رمز عبور اشتباه است.');
       } 
       else if (err.code === 'auth/invalid-email') setError('فرمت ایمیل نامعتبر است');
       else if (err.code === 'auth/too-many-requests') setError('تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً چند دقیقه صبر کنید.');
@@ -120,7 +128,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
         } else if (err.code === 'auth/popup-closed-by-user') {
             setError('پنجره ورود بسته شد.');
         } else if (err.code === 'auth/invalid-credential') {
-             setError('اختلال در ارتباط با گوگل. لطفاً صفحه را رفرش کنید و دوباره تلاش کنید.');
+             setError('اطلاعات حساب گوگل معتبر نیست یا درخواست رد شد.');
         } else {
             setError(err.message || 'خطا در ورود با گوگل');
         }
@@ -135,7 +143,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
       try {
           await loginAnonymously();
       } catch (e: any) {
-          setError('خطا در ورود مهمان. لطفا دوباره تلاش کنید.');
+          if (e.code === 'auth/admin-restricted-operation' || e.code === 'auth/operation-not-allowed') {
+              setError('ورود مهمان توسط مدیر سیستم غیرفعال شده است.');
+          } else {
+              setError('خطا در ورود مهمان. لطفا دوباره تلاش کنید.');
+          }
       } finally {
           setLoading(false);
       }

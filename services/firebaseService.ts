@@ -203,13 +203,13 @@ export const logoutUser = async (uid?: string) => {
     await firebaseSignOut(auth);
 };
 
-export const getUserProfile = async (uid: string) => {
+export const getUserProfile = async (uid: string): Promise<UserProfileData | null> => {
     if (!db) return null;
     try {
         const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return docSnap.data();
+            return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
         } else {
             const currentUser = auth?.currentUser;
             if (currentUser && currentUser.uid === uid) {
@@ -217,26 +217,33 @@ export const getUserProfile = async (uid: string) => {
                 if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') {
                      const role = email === CONFIG.OWNER_EMAIL ? 'owner' : 'developer';
                      const name = email === CONFIG.OWNER_EMAIL ? 'مدیر سیستم' : 'توسعه‌دهنده سیستم';
-                     const newProfile = {
+                     const newProfile: UserProfileData = {
+                        uid: currentUser.uid,
                         name: currentUser.displayName || name,
-                        email: email,
+                        email: email || '',
                         phone: '',
                         username: role,
                         bio: 'حساب سیستمی',
                         avatar: currentUser.photoURL || `https://ui-avatars.com/api/?name=${role}&background=random&color=fff`,
-                        role: role,
+                        role: role as UserRole,
                         isBanned: false,
                         createdAt: serverTimestamp(),
                         lastSeen: serverTimestamp(),
                         status: 'online'
                      };
-                     await setDoc(docRef, newProfile);
+                     const { uid: _, ...profileToSave } = newProfile;
+                     await setDoc(docRef, profileToSave);
                      return newProfile;
                 }
             }
         }
-    } catch (e) {
-        console.error("Error fetching profile", e);
+    } catch (e: any) {
+        // Suppress specific offline errors to avoid console noise
+        if (e.code === 'unavailable' || e.message?.includes('offline')) {
+            console.warn("Client offline: getUserProfile failed gracefully.");
+        } else {
+            console.error("Error fetching profile", e);
+        }
     }
     return null;
 };
@@ -287,17 +294,21 @@ export const updateUserProfileDoc = async (uid: string, data: any) => {
 
 export const searchUser = async (term: string): Promise<UserProfileData | null> => {
     if (!db) return null;
-    let q = query(collection(db, "users"), where("username", "==", term.replace('@', '')));
-    let snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        return { uid: doc.id, ...doc.data() } as UserProfileData;
-    }
-    q = query(collection(db, "users"), where("phone", "==", term));
-    snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        return { uid: doc.id, ...doc.data() } as UserProfileData;
+    try {
+        let q = query(collection(db, "users"), where("username", "==", term.replace('@', '')));
+        let snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            return { uid: doc.id, ...doc.data() } as UserProfileData;
+        }
+        q = query(collection(db, "users"), where("phone", "==", term));
+        snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            return { uid: doc.id, ...doc.data() } as UserProfileData;
+        }
+    } catch (e) {
+        console.warn("User search failed (offline or other issue)");
     }
     return null;
 };
@@ -468,9 +479,13 @@ export const getGroupMembers = async (chatId: string): Promise<UserProfileData[]
 
 export const getGroupDetails = async (chatId: string) => {
     if (!db) return null;
-    const chatRef = doc(db, "chats", chatId);
-    const snap = await getDoc(chatRef);
-    return snap.exists() ? snap.data() : null;
+    try {
+        const chatRef = doc(db, "chats", chatId);
+        const snap = await getDoc(chatRef);
+        return snap.exists() ? snap.data() : null;
+    } catch(e) {
+        return null;
+    }
 };
 
 export const isGroupAdmin = async (chatId: string, userId: string): Promise<boolean> => {
@@ -751,9 +766,13 @@ export const setGlobalMaintenance = async (status: boolean) => { if(!db) return;
 export const deleteUserAccount = async (targetUid: string) => { if(!db) return; try { await deleteDoc(doc(db, "users", targetUid)); } catch(e) {} };
 export const getWordFilters = async (): Promise<string[]> => {
     if (!db) return [];
-    const docRef = doc(db, "settings", "wordFilters");
-    const snap = await getDoc(docRef);
-    if (snap.exists()) return (snap.data() as any).bannedWords || [];
+    try {
+        const docRef = doc(db, "settings", "wordFilters");
+        const snap = await getDoc(docRef);
+        if (snap.exists()) return (snap.data() as any).bannedWords || [];
+    } catch(e) {
+        console.warn("Could not fetch word filters (offline)");
+    }
     return [];
 };
 export const updateWordFilters = async (words: string[]) => {

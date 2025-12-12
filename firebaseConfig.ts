@@ -1,7 +1,7 @@
 
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getAnalytics } from "firebase/analytics";
@@ -28,7 +28,18 @@ let analytics: any = null;
 
 try {
     app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    
+    // Initialize Firestore with Offline Persistence
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+        console.log("Firestore persistence enabled");
+    } catch (e) {
+        console.warn("Firestore persistence init failed, falling back to default", e);
+        db = getFirestore(app);
+    }
+
     auth = getAuth(app);
     
     // Analytics (Optional)

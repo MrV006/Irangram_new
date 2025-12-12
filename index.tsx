@@ -18,6 +18,13 @@ interface ErrorBoundaryState {
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // Fix: Explicitly declare state property to resolve "Property 'state' does not exist" error
   public state: ErrorBoundaryState = { hasError: false, error: null };
+  // Fix: Explicitly declare props property to resolve "Property 'props' does not exist" error
+  public props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
