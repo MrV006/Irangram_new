@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff } from 'lucide-react';
+import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff, AlertTriangle } from 'lucide-react';
 import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount } from '../types';
 import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus } from '../services/firebaseService';
 
@@ -35,7 +35,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeFolder, setActiveFolder] = useState<FolderType>('all');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  
+  // Connectivity States
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [serverReachable, setServerReachable] = useState(true);
   
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, contactId: string } | null>(null);
 
@@ -60,15 +63,44 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const isGuest = userProfile.role === 'guest';
 
-  // Network Status Listener
+  // Network Status Listener with Ping
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const checkServerConnection = async () => {
+        if (!navigator.onLine) {
+            setIsOnline(false);
+            return;
+        }
+        
+        try {
+            // Attempt to ping a reliable Google service to check for filtering/connectivity
+            // We use 'no-cors' to allow the request to go out without failing due to CORS policies
+            // If the request fails at network level (VPN off in Iran), it throws an error.
+            await fetch(`https://www.gstatic.com/generate_204?t=${Date.now()}`, { 
+                mode: 'no-cors',
+                cache: 'no-store' 
+            });
+            setServerReachable(true);
+            setIsOnline(true);
+        } catch (e) {
+            console.warn("Server unreachable:", e);
+            setServerReachable(false);
+        }
+    };
+
+    const handleOnline = () => { setIsOnline(true); checkServerConnection(); };
     const handleOffline = () => setIsOnline(false);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    
+    // Initial check and periodic poll
+    checkServerConnection();
+    const interval = setInterval(checkServerConnection, 15000); // Check every 15s
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
     };
   }, []);
 
@@ -222,12 +254,17 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className="h-full flex flex-col bg-white dark:bg-telegram-secondaryDark border-l border-gray-200 dark:border-telegram-borderDark relative">
       
       {/* Connection Status Bar */}
-      {!isOnline && (
-        <div className="bg-gray-500/90 text-white text-xs py-1 text-center font-bold flex items-center justify-center gap-2 animate-pulse transition-all">
-            <Loader2 size={12} className="animate-spin" />
-            <span>در حال اتصال...</span>
+      {!isOnline ? (
+        <div className="bg-red-500/90 text-white text-xs py-1.5 text-center font-bold flex items-center justify-center gap-2 animate-pulse transition-all">
+            <WifiOff size={14} />
+            <span>اتصال اینترنت قطع است</span>
         </div>
-      )}
+      ) : !serverReachable ? (
+        <div className="bg-orange-500/90 text-white text-xs py-1.5 text-center font-bold flex items-center justify-center gap-2 transition-all cursor-pointer hover:bg-orange-600" onClick={() => window.location.reload()}>
+            <AlertTriangle size={14} />
+            <span>عدم اتصال به سرور (لطفا فیلترشکن را بررسی کنید)</span>
+        </div>
+      ) : null}
 
       {/* Install Help Modal */}
       {showInstallModal && (

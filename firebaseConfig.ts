@@ -1,10 +1,10 @@
 
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
+import * as firebaseApp from "firebase/app";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { getStorage } from "firebase/storage";
-import { getAnalytics } from "firebase/analytics";
+import * as firebaseAnalytics from "firebase/analytics";
 import { CONFIG } from "./config";
 
 // ------------------------------------------------------------------
@@ -28,7 +28,7 @@ let storage: any = null;
 let analytics: any = null;
 
 try {
-    app = initializeApp(firebaseConfig);
+    app = firebaseApp.initializeApp(firebaseConfig);
     
     // --- PROXY CONFIGURATION FOR FIRESTORE ---
     // If a proxy URL is set in config, parse the hostname and use it for Firestore.
@@ -44,8 +44,7 @@ try {
                 ...firestoreSettings,
                 host: proxyUrl.host,
                 ssl: true,
-                experimentalForceLongPolling: true, // Force long polling to bypass blocking/instability through proxy
-                experimentalAutoDetectLongPolling: false, // Disable auto-detect to ensure it sticks to long polling
+                // Removed forced long polling to let SDK optimize connection
                 ignoreUndefinedProperties: true
             };
             console.log("Using Firestore Proxy:", proxyUrl.host);
@@ -62,12 +61,12 @@ try {
         db = getFirestore(app);
     }
 
-    auth = getAuth(app);
+    auth = firebaseAuth.getAuth(app);
     
     // Analytics (Optional)
     if (typeof window !== 'undefined') {
       try {
-        analytics = getAnalytics(app);
+        analytics = firebaseAnalytics.getAnalytics(app);
       } catch (e) {
         console.warn("Analytics not supported in this environment");
       }
@@ -82,7 +81,7 @@ try {
     }
     
     // Explicitly set persistence to LOCAL
-    setPersistence(auth, browserLocalPersistence).catch((error) => {
+    firebaseAuth.setPersistence(auth, firebaseAuth.browserLocalPersistence).catch((error) => {
         console.error("Firebase Persistence Error:", error);
     });
 
