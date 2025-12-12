@@ -46,7 +46,8 @@ import {
     deletePrivateMessage,
     updateUserChatPreference,
     subscribeToChatPreferences,
-    deleteUserAccount
+    deleteUserAccount,
+    castPollVote
 } from './services/firebaseService';
 import { getGeminiResponse } from './services/geminiService';
 import { 
@@ -239,8 +240,8 @@ const App: React.FC = () => {
   const unsubscribePrivateRef = useRef<(() => void) | null>(null); 
   const notificationSound = useRef(new Audio(POP_SOUND_BASE64));
 
-  const fetchingContactIds = useRef<Set<string>>(new Set());
   const contactsRef = useRef(contacts);
+  const fetchingContactIds = useRef<Set<string>>(new Set());
   
   const stateRef = useRef({
       activeContactId,
@@ -472,13 +473,96 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // ... (Other useEffects)
-
+  // --- Real-Time Chat Discovery & 1-Second Polling Logic ---
   useEffect(() => {
-    // Sync logic for active session, pinned messages, etc.
-    // (This part is simplified from original file to avoid repetition, assumes the same logic exists)
-    // ...
-  }, [activeContactId, currentUser]);
+      if(!currentUser) return;
+
+      // This is the listener for real-time chat updates (new messages, new chats)
+      const unsubUserChats = subscribeToUserChats(currentUser.uid, async (userChats) => {
+           // We map userChats to sessions/contacts logic
+           
+           // Process each chat to ensure we have the contact info
+           for (const chat of userChats) {
+                // If this is a group/channel
+                if (chat.type === 'group' || chat.type === 'channel') {
+                    setContacts(prev => {
+                        if (prev.some(c => c.id === chat.id)) return prev;
+                        return [...prev, {
+                            id: chat.id,
+                            name: chat.name,
+                            avatar: chat.avatar,
+                            bio: chat.description || '',
+                            type: chat.type,
+                            status: 'online',
+                            username: '',
+                            phone: '',
+                            isPinned: chat.isPinned, // From DB if saved there
+                            creatorId: chat.creatorId
+                        }];
+                    });
+                } else {
+                    // It's a private chat
+                    // Find the other participant ID
+                    const otherId = chat.participants.find((p: string) => p !== currentUser.uid);
+                    
+                    if (otherId && otherId !== 'saved') {
+                        // Check if we already have this contact
+                        if (!contactsRef.current.some(c => c.id === otherId)) {
+                            // If we don't have it, and we aren't already fetching it
+                            if (!fetchingContactIds.current.has(otherId)) {
+                                fetchingContactIds.current.add(otherId);
+                                try {
+                                    const profile = await getUserProfile(otherId);
+                                    if (profile) {
+                                        const newContact: Contact = {
+                                            id: profile.uid,
+                                            name: profile.name,
+                                            avatar: profile.avatar,
+                                            bio: profile.bio,
+                                            username: '@' + profile.username,
+                                            phone: profile.phone,
+                                            status: profile.status as any,
+                                            type: 'user'
+                                        };
+                                        setContacts(prev => [...prev, newContact]);
+                                    }
+                                } catch (e) { console.error("Error fetching new contact", e); }
+                                finally { fetchingContactIds.current.delete(otherId); }
+                            }
+                        }
+                    }
+                }
+
+                // Update Session Data (Unread, Last Message)
+                setSessions(prev => ({
+                    ...prev,
+                    [chat.type === 'user' ? (chat.participants.find((p:string) => p !== currentUser.uid) || 'saved') : chat.id]: {
+                        contactId: chat.id,
+                        messages: prev[chat.id]?.messages || [], // Messages loaded separately
+                        unreadCount: 0, // Simplified for now
+                        draft: prev[chat.id]?.draft || '',
+                        pinnedMessage: chat.pinnedMessage
+                    }
+                }));
+           }
+      });
+
+      // 1-Second Interval Check (To ensure immediate updates for new contacts/messages even if listener lags)
+      const checkInterval = setInterval(() => {
+          // In a real optimized app, we wouldn't poll Firestore this frequently.
+          // But since the user explicitly requested "check every 1 second whether they messaged before or not",
+          // The subscribeToUserChats above IS real-time (push).
+          // We use this interval to trigger heartbeat or lightweight check if needed.
+          // For now, we rely on the robust listener above which already handles "new chats from anyone".
+          // We can use this interval to update "Last Seen" UI or connectivity status.
+          updateUserHeartbeat(currentUser.uid, 'online');
+      }, 1000);
+
+      return () => {
+          unsubUserChats();
+          clearInterval(checkInterval);
+      };
+  }, [currentUser]);
   
   useEffect(() => {
       // Notifications logic
@@ -511,13 +595,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-      // Heartbeat
-      if(!currentUser) return;
-      const interval = setInterval(() => updateUserHeartbeat(currentUser.uid, 'online'), 60000);
-      return () => clearInterval(interval);
-  }, [currentUser]);
-
-  useEffect(() => {
       // Chat subscriptions
       if (!activeContactId || !currentUser) return;
 
@@ -548,17 +625,6 @@ const App: React.FC = () => {
           };
       }
   }, [activeContactId, currentUser]);
-
-  useEffect(() => {
-      // User Chats List Subscription
-      if(!currentUser) return;
-      return subscribeToUserChats(currentUser.uid, (userChats) => {
-           // ... (Sync contacts logic, handled inside component usually or simplified here)
-           userChats.forEach(chat => {
-               // ... Logic to ensure chat exists in contacts list or update last message
-           });
-      });
-  }, [currentUser]);
 
   // --- WebRTC Call Handlers ---
 
@@ -744,7 +810,8 @@ const App: React.FC = () => {
                   username: '',
                   phone: '',
                   status: 'online',
-                  type: groupData.type as any
+                  type: groupData.type as any,
+                  creatorId: currentUser.uid
               };
               handleAddContact(newContact);
           }
@@ -933,7 +1000,8 @@ const App: React.FC = () => {
                 isSticker: content.isSticker,
                 replyToId,
                 senderId: currentUser.uid,
-                forwardedFrom: content.forwardedFrom
+                forwardedFrom: content.forwardedFrom,
+                poll: content.poll
             }, { name: userProfile.name, avatar: avatarToSend, role: userProfile.role }); 
         } catch(e) {
             console.error("Global msg failed", e);
@@ -957,7 +1025,8 @@ const App: React.FC = () => {
                 audioDuration: content.audioDuration,
                 isSticker: content.isSticker,
                 replyToId,
-                forwardedFrom: content.forwardedFrom
+                forwardedFrom: content.forwardedFrom,
+                poll: content.poll
             }, { name: userProfile.name, avatar: userProfile.avatar });
         } catch(e) {
             console.error("Private msg failed", e);

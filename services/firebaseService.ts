@@ -625,21 +625,35 @@ export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) =
 
 export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string, role?: UserRole }) => {
     if (!db) {
-        console.error("Firestore DB is not initialized. Message cannot be sent.");
-        throw new Error("خطا در ارتباط با سرور. لطفا اتصال اینترنت را بررسی کنید.");
+        throw new Error("دیتابیس متصل نیست.");
     }
-    try {
-        let finalText = message.text || '';
-        if (finalText && message.type === 'text') {
+    
+    // Explicit check for user authentication
+    const currentUser = auth?.currentUser;
+    if (!currentUser) throw new Error("کاربر احراز هویت نشده است.");
+
+    let finalText = message.text || '';
+    if (finalText && message.type === 'text') {
+        try {
             const bannedWords = await getWordFilters();
             bannedWords.forEach(word => { const regex = new RegExp(word, 'gi'); finalText = finalText.replace(regex, '*'.repeat(word.length)); });
-        }
-        const safeMessage = sanitizeData(message);
-        await addDoc(collection(db, "global_chat"), { ...safeMessage, text: finalText, senderName: userProfile.name, senderAvatar: userProfile.avatar || '', senderRole: userProfile.role || 'user', createdAt: serverTimestamp(), edited: false, reactions: {} });
-    } catch (e) { 
-        console.error("Error sending global message:", e);
-        throw e;
+        } catch(e) { /* ignore offline */ }
     }
+    
+    const safeMessage = sanitizeData({
+        ...message,
+        text: finalText,
+        senderId: currentUser.uid,
+        senderName: userProfile.name,
+        senderAvatar: userProfile.avatar || '',
+        senderRole: userProfile.role || 'user',
+        createdAt: serverTimestamp(),
+        edited: false,
+        reactions: {},
+        type: message.type || 'text'
+    });
+
+    await addDoc(collection(db, "global_chat"), safeMessage);
 };
 
 export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
@@ -662,7 +676,10 @@ export const editPrivateMessage = async (chatId: string, messageId: string, newT
 
 export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => void) => {
     if (!db) return () => {};
+    
+    // Listen for chats where the user is a participant
     const q = query(collection(db, "chats"), where("participants", "array-contains", uid));
+    
     return onSnapshot(q, (querySnapshot) => {
         const chats = querySnapshot.docs.map(doc => {
             const data = doc.data() as any;
@@ -673,45 +690,56 @@ export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => vo
                 pinnedMessage: data.pinnedMessage || null
             };
         });
+        // Sort in client side to handle potential timestamp issues
         chats.sort((a, b) => b.updatedAt - a.updatedAt);
         callback(chats);
     });
 };
 
 export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
-    if (!db) {
-        console.error("Firestore DB is not initialized. Message cannot be sent.");
-        throw new Error("خطا در ارتباط با سرور. لطفا اتصال اینترنت را بررسی کنید.");
-    }
-    const chatRef = doc(db, "chats", chatId);
-    const currentUser = auth.currentUser;
-    // Fallback: If auth.currentUser is not available (rare), try to use message.senderId if provided
+    if (!db) throw new Error("دیتابیس متصل نیست.");
+    
+    const currentUser = auth?.currentUser;
+    // We prioritize auth.currentUser. If called by bot/admin spoofing, senderId might be in message.
     const senderUid = currentUser?.uid || message.senderId;
     
-    if (!senderUid) {
-        console.error("No sender UID available for sending message");
-        return;
-    }
+    if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
 
-    // Ensure we handle 'saved' messages and Gemini bot correctly in participants array
-    const participants = receiverId === 'saved' ? [senderUid] : [senderUid, receiverId];
-
-    // Use setDoc with merge to ensure document exists without overwriting unrelated fields
-    await setDoc(chatRef, { 
-        participants, 
+    const chatRef = doc(db, "chats", chatId);
+    
+    // For groups/channels, participants are managed separately. For 1-on-1, ensure both are in.
+    // If it's a group (receiverId is a group ID), we don't update participants here usually, 
+    // unless it's a new DM.
+    
+    // Check if chatId is a group or DM
+    const isGroup = chatId === receiverId && receiverId !== senderUid; 
+    
+    const chatUpdateData: any = { 
         updatedAt: serverTimestamp(), 
         lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
         lastSenderId: senderUid 
-    }, { merge: true });
+    };
+
+    // Only update participants for DMs to ensure the other person sees the chat
+    if (!isGroup && receiverId !== 'saved') {
+         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
+    } else if (receiverId === 'saved') {
+         chatUpdateData.participants = arrayUnion(senderUid);
+    }
+
+    await setDoc(chatRef, chatUpdateData, { merge: true });
     
-    const safeMessage = sanitizeData(message);
-    await addDoc(collection(db, "chats", chatId, "messages"), { 
-        ...safeMessage, 
+    const safeMessage = sanitizeData({
+        ...message,
+        senderId: senderUid,
         senderName: userProfile.name, 
         senderAvatar: userProfile.avatar || '', 
         createdAt: serverTimestamp(), 
-        reactions: {} 
+        reactions: {},
+        type: message.type || 'text'
     });
+    
+    await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
 };
 
 // --- POLLS ---
@@ -729,21 +757,22 @@ export const castPollVote = async (chatId: string, messageId: string, optionId: 
             if (poll.isClosed) return;
 
             let newOptions = poll.options.map(opt => {
-                // If not multi-choice, remove user from other options
-                if (!poll.allowMultiple && opt.id !== optionId && opt.voterIds.includes(userId)) {
-                    return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) };
-                }
-                return opt;
-            });
-
-            newOptions = newOptions.map(opt => {
+                // Determine if user already voted for THIS option
+                const hasVotedThis = opt.voterIds.includes(userId);
+                
                 if (opt.id === optionId) {
-                    if (opt.voterIds.includes(userId)) {
-                        // Toggle off
+                    if (hasVotedThis) {
+                        // Toggle OFF (Remove vote)
                         return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) };
                     } else {
-                        // Toggle on
+                        // Toggle ON (Add vote)
                         return { ...opt, voterIds: [...opt.voterIds, userId] };
+                    }
+                } else {
+                    // For other options:
+                    // If NOT multiple choice, remove vote from others
+                    if (!poll.allowMultiple && opt.voterIds.includes(userId)) {
+                        return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) };
                     }
                 }
                 return opt;

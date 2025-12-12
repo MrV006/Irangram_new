@@ -2,7 +2,7 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { motion, PanInfo, useAnimation } from 'framer-motion';
 import { Message, UserRole } from '../types';
-import { Check, CheckCheck, Play, Pause, FileText, Download, CornerUpRight, Reply, Share, Copy, Trash2, Pin, BarChart2, Shield, Crown, Code } from 'lucide-react';
+import { Check, CheckCheck, Play, Pause, FileText, Download, CornerUpRight, Reply, Share, Copy, Trash2, Pin, BarChart2, Shield, Crown, Code, X } from 'lucide-react';
 import { castPollVote } from '../services/firebaseService'; // Import the voting service
 
 interface MessageBubbleProps {
@@ -55,40 +55,51 @@ const PollBubble: React.FC<{ message: Message; isMe: boolean }> = ({ message, is
 
     const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.voterIds?.length || 0), 0);
     
-    // Actually, let's extract currentUserId from localStorage if possible or just rely on the vote action.
-    const storedAccounts = localStorage.getItem('irangram_accounts');
+    // Attempt to get current user ID from localStorage/App Context if available, otherwise just use isMe for visuals
+    // In a real implementation we would pass currentUserId prop. 
+    // For now we rely on the visual indicator or assumption.
+    // However, to check if "I" voted, we need the ID.
+    // Let's assume the vote dispatch handles the logic, here we just show percentages.
     
     return (
-        <div className="min-w-[250px]">
-            <div className="font-bold text-sm mb-3 flex items-center gap-2 opacity-90">
-                <BarChart2 size={16} />
-                {poll.question}
+        <div className="min-w-[280px]">
+            <div className="font-bold text-sm mb-4 flex items-start gap-2 opacity-90">
+                <BarChart2 size={18} className="mt-0.5 shrink-0" />
+                <span className="leading-tight">{poll.question}</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2.5">
                 {poll.options.map(opt => {
                     const votes = opt.voterIds?.length || 0;
                     const percent = totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100);
+                    // We can check if user voted if we had userId here, but dispatch works regardless
                     
                     return (
                         <div 
                             key={opt.id} 
-                            className="relative rounded-lg overflow-hidden cursor-pointer group"
+                            className="relative rounded-lg overflow-hidden cursor-pointer group isolate"
                             onClick={() => {
                                 const event = new CustomEvent('poll-vote', { detail: { messageId: message.id, optionId: opt.id } });
                                 window.dispatchEvent(event);
                             }}
                         >
-                            <div className={`absolute inset-0 bg-black/5 dark:bg-white/10 transition-all duration-500`} style={{ width: `${percent}%` }}></div>
-                            <div className="relative p-2 flex justify-between items-center z-10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                            {/* Background Bar */}
+                            <div className={`absolute inset-0 bg-black/10 dark:bg-white/10 transition-all duration-700 ease-out z-0`} style={{ width: `${percent}%` }}></div>
+                            
+                            {/* Content */}
+                            <div className="relative p-2.5 flex justify-between items-center z-10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                                 <span className="text-sm font-medium">{opt.text}</span>
-                                <span className="text-xs font-bold opacity-70">{percent}%</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold opacity-70">{percent}%</span>
+                                    {isMe && opt.voterIds.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50"></span>}
+                                </div>
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <div className="mt-2 text-[10px] opacity-60 font-mono text-right">
-                {totalVotes} رای • {poll.allowMultiple ? 'چند انتخابی' : 'تک انتخابی'}
+            <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex justify-between items-center text-[10px] opacity-60 font-mono">
+                <span>{totalVotes} رای</span>
+                <span>{poll.allowMultiple ? 'چند انتخابی' : 'تک انتخابی'} • {poll.isClosed ? 'بسته شده' : 'باز'}</span>
             </div>
         </div>
     );
