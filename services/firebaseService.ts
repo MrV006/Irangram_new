@@ -621,7 +621,10 @@ export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) =
 };
 
 export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string, role?: UserRole }) => {
-    if (!db) return;
+    if (!db) {
+        console.error("Firestore DB is not initialized. Message cannot be sent.");
+        throw new Error("خطا در ارتباط با سرور. لطفا اتصال اینترنت را بررسی کنید.");
+    }
     try {
         let finalText = message.text || '';
         if (finalText && message.type === 'text') {
@@ -630,7 +633,10 @@ export const sendGlobalMessage = async (message: Partial<Message>, userProfile: 
         }
         const safeMessage = sanitizeData(message);
         await addDoc(collection(db, "global_chat"), { ...safeMessage, text: finalText, senderName: userProfile.name, senderAvatar: userProfile.avatar || '', senderRole: userProfile.role || 'user', createdAt: serverTimestamp(), edited: false, reactions: {} });
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Error sending global message:", e);
+        throw e;
+    }
 };
 
 export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
@@ -670,12 +676,23 @@ export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => vo
 };
 
 export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
-    if (!db) return;
+    if (!db) {
+        console.error("Firestore DB is not initialized. Message cannot be sent.");
+        throw new Error("خطا در ارتباط با سرور. لطفا اتصال اینترنت را بررسی کنید.");
+    }
     const chatRef = doc(db, "chats", chatId);
     const currentUser = auth.currentUser;
-    const participants = receiverId === 'saved' ? [currentUser?.uid] : [currentUser?.uid, receiverId];
+    // Fallback: If auth.currentUser is not available (rare), try to use message.senderId if provided
+    const senderUid = currentUser?.uid || message.senderId;
+    
+    if (!senderUid) {
+        console.error("No sender UID available for sending message");
+        return;
+    }
 
-    await setDoc(chatRef, { participants, updatedAt: serverTimestamp(), lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), lastSenderId: currentUser?.uid }, { merge: true });
+    const participants = receiverId === 'saved' ? [senderUid] : [senderUid, receiverId];
+
+    await setDoc(chatRef, { participants, updatedAt: serverTimestamp(), lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), lastSenderId: senderUid }, { merge: true });
     const safeMessage = sanitizeData(message);
     await addDoc(collection(db, "chats", chatId, "messages"), { ...safeMessage, senderName: userProfile.name, senderAvatar: userProfile.avatar || '', createdAt: serverTimestamp(), reactions: {} });
 };
