@@ -915,7 +915,7 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     // If it's saved messages
     if (receiverId === 'saved') {
          chatUpdateData.participants = arrayUnion(senderUid);
-         chatUpdateData.type = 'user'; // Ensure type is user
+         chatUpdateData.type = 'user'; // Explicitly set type 'user' for saved messages so App.tsx recognizes it
     } 
     // If it's a direct message (not a group ID we know)
     else {

@@ -9,10 +9,11 @@ interface AdminPanelProps {
   onClose: () => void;
   currentUserEmail: string;
   currentUserRole: UserRole;
+  currentUserId: string; // Added currentUserId
   onStartChat: (user: UserProfileData) => void;
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, currentUserRole, onStartChat }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, currentUserRole, currentUserId, onStartChat }) => {
   // Tabs state
   const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'filters' | 'reports' | 'appeals' | 'deletions' | 'maintenance'>('users');
   
@@ -94,6 +95,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
 
   const handleRoleChange = async (uid: string, newRole: string) => {
     if (!isSuperAdmin) return;
+    if (uid === currentUserId) {
+        alert("شما نمی‌توانید نقش خودتان را تغییر دهید.");
+        return;
+    }
     
     const targetUser = users.find(u => u.uid === uid);
     if (!targetUser) return;
@@ -117,6 +122,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
   };
   
   const handleBanToggle = async (uid: string, isBanned: boolean) => {
+    if (uid === currentUserId) {
+        alert("شما نمی‌توانید خودتان را مسدود کنید.");
+        return;
+    }
     const targetUser = users.find(u => u.uid === uid);
     if (!targetUser) return;
 
@@ -129,6 +138,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
 
   const handleMaintenanceToggle = async (uid: string, currentStatus: boolean) => {
       if(!isSuperAdmin) return;
+      if (uid === currentUserId) {
+          alert("شما نمی‌توانید حساب خودتان را به حالت تعمیر ببرید.");
+          return;
+      }
       await toggleUserMaintenance(uid, !currentStatus);
       setUsers(users.map(u => u.uid === uid ? { ...u, isUnderMaintenance: !currentStatus } : u));
   };
@@ -141,6 +154,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
   };
 
   const handleDeleteUserAccount = async (uid: string) => {
+      if (uid === currentUserId) {
+          alert("شما نمی‌توانید حساب خودتان را از اینجا حذف کنید.");
+          return;
+      }
       const targetUser = users.find(u => u.uid === uid);
       if (!targetUser) return;
       if (targetUser.role === 'developer') return;
@@ -180,18 +197,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
 
   // --- Filter Actions ---
   const handleAddWord = async () => {
-      if (!newWord.trim()) return;
-      if (bannedWords.includes(newWord.trim())) return;
-      const updated = [...bannedWords, newWord.trim()];
-      await updateWordFilters(updated);
+      const wordToAdd = newWord.trim();
+      if (!wordToAdd) return;
+      if (bannedWords.includes(wordToAdd)) {
+          setNewWord('');
+          return;
+      }
+      
+      const updated = [...bannedWords, wordToAdd];
+      // Update state first for immediate UI feedback
       setBannedWords(updated);
       setNewWord('');
+      
+      try {
+          await updateWordFilters(updated);
+      } catch (e) {
+          console.error("Failed to update words", e);
+          // Revert if failed
+          setBannedWords(bannedWords);
+          alert("خطا در ذخیره کلمات");
+      }
   };
 
   const handleRemoveWord = async (word: string) => {
       const updated = bannedWords.filter(w => w !== word);
-      await updateWordFilters(updated);
       setBannedWords(updated);
+      await updateWordFilters(updated);
   };
 
   // --- Report/Appeal Actions ---
@@ -305,7 +336,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
             {activeTab === 'users' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
                     {loading ? <div className="col-span-2 text-center py-10">در حال بارگذاری کاربران...</div> : users.map(user => (
-                        <div key={user.uid} className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                        <div key={user.uid} className={`bg-white dark:bg-gray-800 rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${user.uid === currentUserId ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500' : 'border-gray-100 dark:border-gray-700'}`}>
                             {user.isBanned && <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>}
                             {user.isUnderMaintenance && <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500 animate-pulse"></div>}
                             {user.isScreenshotRestricted && <div className="absolute top-0 left-0 w-full h-1 bg-purple-500"></div>}
@@ -315,6 +346,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-bold text-gray-900 dark:text-white text-base truncate">{user.name || 'بدون نام'}</h4>
                                         {user.role === 'guest' && <span className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5 rounded font-bold">مهمان</span>}
+                                        {user.uid === currentUserId && <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-bold">شما</span>}
                                     </div>
                                     <div className="text-xs text-gray-500 font-mono mb-2 truncate" title={user.uid}>{user.uid}</div>
                                     
@@ -327,7 +359,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                         {user.isUnderMaintenance && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-bold flex items-center gap-1"><Construction size={10}/> در حال تعمیر</span>}
                                         {user.isScreenshotRestricted && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold flex items-center gap-1"><CameraOff size={10}/> اسکرین‌شات ممنوع</span>}
                                         
-                                        {isSuperAdmin ? (
+                                        {isSuperAdmin && user.uid !== currentUserId ? (
                                             <select 
                                                 value={user.role} 
                                                 onChange={(e) => handleRoleChange(user.uid, e.target.value)}
@@ -350,70 +382,72 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                 </div>
                             </div>
                             
-                            <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
-                                <div className="flex items-center gap-2 justify-between">
-                                    <div className="flex gap-2">
-                                        {(isSuperAdmin || (currentUserRole === 'admin' && user.role === 'user')) && (
-                                            <>
-                                                <button 
-                                                    onClick={() => { setSpyModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' }); setSpyChats([]); setActiveSpyChat(null); getAdminSpyChats(user.uid).then(setSpyChats); }}
-                                                    className="p-2.5 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded-xl transition-all" title="نظارت (Spy)"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => setNotifModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' })}
-                                                    className="p-2.5 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all" title="ارسال اعلان"
-                                                >
-                                                    <Bell size={18} />
-                                                </button>
-                                                {isSuperAdmin && (
-                                                    <button
-                                                        onClick={() => handleMaintenanceToggle(user.uid, user.isUnderMaintenance || false)}
-                                                        className={`p-2.5 rounded-xl transition-all ${user.isUnderMaintenance ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-600 hover:bg-yellow-500 hover:text-white'}`}
-                                                        title="حالت تعمیر برای کاربر"
+                            {user.uid !== currentUserId && (
+                                <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+                                    <div className="flex items-center gap-2 justify-between">
+                                        <div className="flex gap-2">
+                                            {(isSuperAdmin || (currentUserRole === 'admin' && user.role === 'user')) && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => { setSpyModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' }); setSpyChats([]); setActiveSpyChat(null); getAdminSpyChats(user.uid).then(setSpyChats); }}
+                                                        className="p-2.5 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded-xl transition-all" title="نظارت (Spy)"
                                                     >
-                                                        <Construction size={18} />
+                                                        <Eye size={18} />
                                                     </button>
-                                                )}
-                                                {isSuperAdmin && (
-                                                    <button
-                                                        onClick={() => handleScreenshotToggle(user.uid, user.isScreenshotRestricted || false)}
-                                                        className={`p-2.5 rounded-xl transition-all ${user.isScreenshotRestricted ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600 hover:bg-purple-500 hover:text-white'}`}
-                                                        title="ممنوعیت اسکرین‌شات"
+                                                    <button 
+                                                        onClick={() => setNotifModal({ isOpen: true, targetUid: user.uid, targetName: user.name || 'کاربر' })}
+                                                        className="p-2.5 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all" title="ارسال اعلان"
                                                     >
-                                                        <CameraOff size={18} />
+                                                        <Bell size={18} />
                                                     </button>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {(isSuperAdmin) && (
-                                            <button 
-                                                onClick={() => handleDeleteUserAccount(user.uid)}
-                                                className="p-2.5 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded-xl transition-all" title="حذف حساب"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        )}
-                                        {isSuperAdmin && (
-                                            <button 
-                                                onClick={() => handleBanToggle(user.uid, user.isBanned || false)}
-                                                className={`p-2.5 rounded-xl transition-all ${user.isBanned ? 'bg-green-100 text-green-600 hover:bg-green-600 hover:text-white' : 'bg-red-100 text-red-600 hover:bg-red-600 hover:text-white'}`} title={user.isBanned ? 'رفع مسدودی' : 'مسدود کردن'}
-                                            >
-                                                <Ban size={18} />
-                                            </button>
-                                        )}
+                                                    {isSuperAdmin && (
+                                                        <button
+                                                            onClick={() => handleMaintenanceToggle(user.uid, user.isUnderMaintenance || false)}
+                                                            className={`p-2.5 rounded-xl transition-all ${user.isUnderMaintenance ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-600 hover:bg-yellow-500 hover:text-white'}`}
+                                                            title="حالت تعمیر برای کاربر"
+                                                        >
+                                                            <Construction size={18} />
+                                                        </button>
+                                                    )}
+                                                    {isSuperAdmin && (
+                                                        <button
+                                                            onClick={() => handleScreenshotToggle(user.uid, user.isScreenshotRestricted || false)}
+                                                            className={`p-2.5 rounded-xl transition-all ${user.isScreenshotRestricted ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600 hover:bg-purple-500 hover:text-white'}`}
+                                                            title="ممنوعیت اسکرین‌شات"
+                                                        >
+                                                            <CameraOff size={18} />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {(isSuperAdmin) && (
+                                                <button 
+                                                    onClick={() => handleDeleteUserAccount(user.uid)}
+                                                    className="p-2.5 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded-xl transition-all" title="حذف حساب"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                            {isSuperAdmin && (
+                                                <button 
+                                                    onClick={() => handleBanToggle(user.uid, user.isBanned || false)}
+                                                    className={`p-2.5 rounded-xl transition-all ${user.isBanned ? 'bg-green-100 text-green-600 hover:bg-green-600 hover:text-white' : 'bg-red-100 text-red-600 hover:bg-red-600 hover:text-white'}`} title={user.isBanned ? 'رفع مسدودی' : 'مسدود کردن'}
+                                                >
+                                                    <Ban size={18} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* GROUPS TAB, FILTERS TAB, REPORTS TAB, APPEALS TAB, DELETIONS TAB - UNCHANGED, KEEPING THEM */}
+            {/* GROUPS TAB */}
             {activeTab === 'groups' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {allGroups.length === 0 ? <p className="col-span-2 text-center text-gray-500 py-10">هیچ گروه یا کانالی یافت نشد.</p> : allGroups.map(group => (
