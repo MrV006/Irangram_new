@@ -2,22 +2,22 @@
 /**
  * App Configuration
  * This file centralizes connection settings. 
- * Switch `USE_REAL_SERVER` to true when you have a Node.js/Python backend ready.
  */
 
 export const CONFIG = {
-  // Toggle this to switch between Local Mock and Real Server
+  // Toggle this to switch between Local Mock and Real Server (Keep false for Firebase)
   USE_REAL_SERVER: false, 
 
-  // Your Backend URL (e.g., http://localhost:5000 or https://api.mydomain.com)
-  API_BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
-  
-  // Socket URL for real-time features
-  SOCKET_URL: process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000',
+  // IMPORTANT: Set this to your Cloudflare Worker URL to bypass filtering in Iran.
+  // 1. Create a Worker in Cloudflare Dashboard.
+  // 2. Paste the code from `proxy-worker.js`.
+  // 3. Copy the Worker URL (e.g. https://your-worker.subdomain.workers.dev) and paste it below.
+  // IF LEFT EMPTY: The app will try to connect directly to Google (Requires VPN).
+  CLOUDFLARE_PROXY_URL: 'https://irangram-proxy.amirrezaveisi45.workers.dev', 
 
   // App Info
   APP_NAME: 'ایران‌گرام',
-  VERSION: '1.8.0',
+  VERSION: '2.0.0',
   
   // SUPER ADMIN EMAILS
   OWNER_EMAIL: 'amirrezaveisi45@gmail.com',

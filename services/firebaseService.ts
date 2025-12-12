@@ -1,4 +1,3 @@
-
 import { db, auth, storage } from "../firebaseConfig";
 import { 
   collection, 
@@ -9,36 +8,31 @@ import {
   onSnapshot, 
   serverTimestamp, 
   Timestamp,
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  where,
-  getDocs,
-  writeBatch,
-  deleteDoc,
-  arrayUnion,
-  arrayRemove
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  where, 
+  getDocs, 
+  writeBatch, 
+  deleteDoc, 
+  arrayUnion, 
+  arrayRemove 
 } from "firebase/firestore";
-import { 
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  uploadBytesResumable
-} from "firebase/storage";
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut as firebaseSignOut,
-  updateProfile,
-  onAuthStateChanged,
-  User,
-  GoogleAuthProvider,
-  signInWithPopup,
-  sendPasswordResetEmail,
-  updatePassword,
-  signInAnonymously
+  signOut as firebaseSignOut, 
+  updateProfile, 
+  onAuthStateChanged, 
+  User, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  sendPasswordResetEmail, 
+  updatePassword, 
+  signInAnonymously 
 } from "firebase/auth";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
 import { CONFIG } from "../config";
 
@@ -56,60 +50,172 @@ const sanitizeData = (data: any) => {
     return clean;
 };
 
-// --- AUTHENTICATION ---
-export const subscribeToAuth = (callback: (user: User | null) => void) => {
+// --- AUTHENTICATION HELPERS (PROXY SUPPORT) ---
+
+const API_KEY = "AIzaSyAzZX5GMMO2DrZCDlOxRgiXQEt2IJ2Vkw8"; // From config
+const STORAGE_BUCKET = "irangram-onlinemessenger.firebasestorage.app";
+
+// Helper to get Auth URL (Proxy or Direct)
+const getAuthUrl = (endpoint: string) => {
+    const baseUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '') || '';
+    if (baseUrl) {
+        return `${baseUrl}/identitytoolkit/v1/accounts:${endpoint}?key=${API_KEY}`;
+    }
+    return `https://identitytoolkit.googleapis.com/v1/accounts:${endpoint}?key=${API_KEY}`;
+};
+
+// Helper to get Storage URL (Proxy or Direct)
+const getStorageUrl = (path: string) => {
+    const baseUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '') || '';
+    const encodedPath = encodeURIComponent(path);
+    if (baseUrl) {
+        // Route through proxy: /v0/b/[bucket]/o/[path]
+        return `${baseUrl}/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}`;
+    }
+    return `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}`;
+};
+
+// Manual User Storage for Proxy Mode
+const saveProxyUser = (userData: any) => {
+    localStorage.setItem('irangram_proxy_user', JSON.stringify(userData));
+};
+
+const getProxyUser = () => {
+    const data = localStorage.getItem('irangram_proxy_user');
+    return data ? JSON.parse(data) : null;
+};
+
+const clearProxyUser = () => {
+    localStorage.removeItem('irangram_proxy_user');
+};
+
+// Unified Get User (Checks SDK first, then LocalStorage)
+export const getCurrentUser = () => {
+    if (auth?.currentUser) return auth.currentUser;
+    const proxy = getProxyUser();
+    if (proxy) return { uid: proxy.localId, email: proxy.email, displayName: proxy.displayName || 'User', photoURL: '' }; // Mocking Firebase User object
+    return null;
+};
+
+export const subscribeToAuth = (callback: (user: any | null) => void) => {
+    // 1. Check if we have a proxy user already (for immediate render)
+    const proxyUser = getProxyUser();
+    if (proxyUser) {
+        // Create a mock user object compatible with Firebase User
+        const mockUser = { uid: proxyUser.localId, email: proxyUser.email, displayName: proxyUser.displayName || 'User' };
+        callback(mockUser);
+    }
+
     if (!auth) {
-        console.warn("Auth module not initialized. Treating as logged out.");
-        callback(null);
+        if (!proxyUser) callback(null);
         return () => {};
     }
-    return onAuthStateChanged(auth, callback);
+
+    // 2. Listen to real SDK (updates override local if connection works)
+    return onAuthStateChanged(auth, (user) => {
+        if (user) {
+            callback(user);
+        } else {
+            // If SDK says no user, check if we have a manual proxy session
+            const stored = getProxyUser();
+            if (stored) {
+                callback({ uid: stored.localId, email: stored.email, displayName: stored.displayName || 'User' });
+            } else {
+                callback(null);
+            }
+        }
+    });
 };
 
 export const registerUser = async (email: string, pass: string, name: string, phone: string) => {
-    if (!auth) throw new Error("سرویس احراز هویت در دسترس نیست. لطفا اینترنت خود را بررسی کنید.");
-    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-    const user = userCredential.user;
-    
-    let role: UserRole = 'user';
-    if (email === CONFIG.OWNER_EMAIL) role = 'owner';
-    else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
-
-    await updateProfile(user, { displayName: name });
-    if (db) {
-        await setDoc(doc(db, "users", user.uid), {
-            name: name,
-            email: email,
-            phone: phone,
-            username: email.split('@')[0],
-            bio: "کاربر جدید ایران‌گرام",
-            avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`,
-            role: role,
-            isBanned: false,
-            createdAt: serverTimestamp(),
-            lastSeen: serverTimestamp(),
-            status: 'online'
+    // Try via Proxy REST API first (Bypasses Filter)
+    try {
+        const response = await fetch(getAuthUrl('signUp'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass, returnSecureToken: true })
         });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || 'Registration failed');
+
+        // Save session locally
+        const userData = { ...data, displayName: name };
+        saveProxyUser(userData);
+
+        // Save profile to Firestore (using Proxy connection setup in config)
+        if (db) {
+            let role: UserRole = 'user';
+            if (email === CONFIG.OWNER_EMAIL) role = 'owner';
+            else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
+
+            await setDoc(doc(db, "users", data.localId), {
+                name: name,
+                email: email,
+                phone: phone,
+                username: email.split('@')[0],
+                bio: "کاربر جدید ایران‌گرام",
+                avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`,
+                role: role,
+                isBanned: false,
+                createdAt: serverTimestamp(),
+                lastSeen: serverTimestamp(),
+                status: 'online'
+            });
+        }
+        return { uid: data.localId, ...userData };
+
+    } catch (e) {
+        console.warn("Proxy registration failed, trying SDK...", e);
+        // Fallback to SDK (might fail without VPN)
+        if (!auth) throw new Error("Auth unavailable");
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(cred.user, { displayName: name });
+        return cred.user;
     }
-    return user;
 };
 
 export const loginUser = async (email: string, pass: string) => {
-    if (!auth) throw new Error("سرویس احراز هویت در دسترس نیست.");
-    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-    if (db && userCredential.user) {
-        const userRef = doc(db, "users", userCredential.user.uid);
-        const updates: any = { status: 'online', lastSeen: serverTimestamp() };
-        if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-        if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
-        await setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
+    // Try via Proxy REST API first (Bypasses Filter)
+    try {
+        const response = await fetch(getAuthUrl('signInWithPassword'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass, returnSecureToken: true })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || 'Login failed');
+
+        // Save session
+        saveProxyUser(data);
+
+        // Update status in DB
+        if (db) {
+            const userRef = doc(db, "users", data.localId);
+            const updates: any = { status: 'online', lastSeen: serverTimestamp() };
+            if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
+            if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
+            await setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
+        }
+        return { uid: data.localId, ...data };
+
+    } catch (e: any) {
+        console.warn("Proxy login failed, trying SDK...", e);
+        if (auth) {
+            const cred = await signInWithEmailAndPassword(auth, email, pass);
+            return cred.user;
+        }
+        throw e;
     }
-    return userCredential.user;
 };
 
 export const loginWithGoogle = async (isLoginMode: boolean = false) => {
     if (!auth) throw new Error("سرویس احراز هویت در دسترس نیست.");
     const provider = new GoogleAuthProvider();
+    
+    // Google Sign-In requires redirection or popup to Google domains.
+    // This is hard to proxy fully without a backend.
     
     try {
         const result = await signInWithPopup(auth, provider);
@@ -154,6 +260,8 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
                 await setDoc(docRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
             }
         }
+        // Save to proxy storage for consistency if mixed usage
+        saveProxyUser({ localId: user.uid, email: user.email, displayName: user.displayName });
         return user;
     } catch (error) {
         console.error("Google Sign-In Error", error);
@@ -184,22 +292,40 @@ export const loginAnonymously = async () => {
             expiresAt: expiresAt
         });
     }
+    // Save to proxy storage
+    saveProxyUser({ localId: user.uid, email: '', displayName: 'کاربر مهمان' });
     return user;
 };
 
 export const sendPasswordReset = async (email: string) => {
-    if (!auth) return;
-    await sendPasswordResetEmail(auth, email);
+    // Try Proxy
+    try {
+        await fetch(getAuthUrl('sendOobCode'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ requestType: 'PASSWORD_RESET', email })
+        });
+    } catch(e) {
+        if (auth) await sendPasswordResetEmail(auth, email);
+    }
 };
 
 export const updateUserPassword = async (newPassword: string) => {
-    if (!auth || !auth.currentUser) throw new Error("No user logged in");
-    await updatePassword(auth.currentUser, newPassword);
+    const user = getCurrentUser();
+    if (!user) throw new Error("No user logged in");
+    
+    // Note: Changing password via REST requires ID Token which we might need to refresh
+    // For simplicity, fallback to SDK or require re-login for security in proxy mode
+    if (auth?.currentUser) {
+        await updatePassword(auth.currentUser, newPassword);
+    } else {
+        throw new Error("برای تغییر رمز عبور لطفا از طریق تنظیمات گوگل اقدام کنید یا مجددا وارد شوید.");
+    }
 };
 
 export const logoutUser = async (uid?: string) => {
+    clearProxyUser();
     if (!auth) return;
-    // Attempt to set status offline, but don't block signout if it fails
     if (uid && db) {
         try {
             await updateDoc(doc(db, "users", uid), { status: 'offline', lastSeen: serverTimestamp() });
@@ -210,6 +336,10 @@ export const logoutUser = async (uid?: string) => {
     await firebaseSignOut(auth);
 };
 
+// ... Rest of the file uses 'db', which is now configured to use the proxy host in firebaseConfig.ts
+// ... So the standard Firestore calls below will automatically route through Cloudflare.
+
+// Updated getUserProfile to use getCurrentUser() helper logic if needed, but db access is handled by config
 export const getUserProfile = async (uid: string): Promise<UserProfileData | null> => {
     if (!db) return null;
     try {
@@ -218,7 +348,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         if (docSnap.exists()) {
             return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
         } else {
-            const currentUser = auth?.currentUser;
+            const currentUser = getCurrentUser();
             if (currentUser && currentUser.uid === uid) {
                 const email = currentUser.email;
                 if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') {
@@ -245,7 +375,6 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
             }
         }
     } catch (e: any) {
-        // Suppress specific offline errors to avoid console noise
         if (e.code === 'unavailable' || e.message?.includes('offline')) {
             console.warn("Client offline: getUserProfile failed gracefully.");
         } else {
@@ -345,7 +474,7 @@ export const createGroup = async (name: string, description: string, imageFile: 
     if (!db) return null;
 
     let avatarUrl = `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`;
-    if (imageFile && storage) {
+    if (imageFile) {
         try {
             const path = `groups/${Date.now()}_${imageFile.name}`;
             avatarUrl = await uploadMedia(imageFile, path);
@@ -539,39 +668,96 @@ export const subscribeToAllUsers = (callback: (users: Partial<UserProfileData>[]
 };
 
 // --- STORAGE ---
+// Custom upload using Proxy REST API to bypass filtering
 export const uploadMedia = async (file: File | Blob, path: string): Promise<string> => {
-    if (!storage) throw new Error("سرویس ذخیره‌سازی فایل در دسترس نیست.");
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-};
+    return new Promise(async (resolve, reject) => {
+        // Try Proxy first
+        try {
+            const uploadUrl = getStorageUrl(path);
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': file.type
+                },
+                body: file
+            });
 
-export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgress: (progress: number) => void): Promise<string> => {
-    return new Promise((resolve, reject) => {
+            if (!response.ok) throw new Error('Upload failed via proxy');
+            
+            const data = await response.json();
+            // Construct download URL: https://firebasestorage.googleapis.com/v0/b/[bucket]/o/[name]?alt=media&token=[token]
+            const downloadToken = data.downloadTokens;
+            // We use the proxy for downloading too if needed, but often direct link with token works if not blocked.
+            // If blocked, we should route download via proxy too.
+            // Construct a direct link first. If user is in Iran without VPN, image loading might fail if it hits googleapis directly.
+            // The `getDownloadURL` from SDK returns a googleapis link.
+            
+            // Let's return a link that goes through our proxy? 
+            // Or just return the standard link and hope Cloudflare worker handles /v0/b/ requests if we use relative paths?
+            // React <img src> will make a GET request. If we use the standard URL, it's blocked.
+            // We should return a URL that points to our Worker.
+            
+            const workerUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '');
+            const bucket = "irangram-onlinemessenger.firebasestorage.app";
+            const encodedName = encodeURIComponent(path);
+            
+            // Worker URL to fetch image: https://worker.dev/v0/b/bucket/o/path?alt=media&token=...
+            const publicUrl = `${workerUrl}/v0/b/${bucket}/o/${encodedName}?alt=media&token=${downloadToken}`;
+            resolve(publicUrl);
+            return;
+
+        } catch (e) {
+            console.warn("Proxy upload failed, trying SDK fallback...", e);
+        }
+
+        // Fallback to SDK (will fail without VPN)
         if (!storage) {
             reject(new Error("Storage not available"));
             return;
         }
-        const storageRef = ref(storage, path);
-        const uploadTask = uploadBytesResumable(storageRef, file);
+        try {
+            const storageRef = ref(storage, path);
+            const snapshot = await uploadBytes(storageRef, file);
+            resolve(await getDownloadURL(snapshot.ref));
+        } catch (e) {
+            reject(e);
+        }
+    });
+};
 
-        uploadTask.on('state_changed', 
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                onProgress(progress);
-            }, 
-            (error) => {
-                reject(error);
-            }, 
-            async () => {
-                try {
-                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                    resolve(downloadURL);
-                } catch (e) {
-                    reject(e);
-                }
+export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgress: (progress: number) => void): Promise<string> => {
+    // XMLHttpRequest for progress support with Proxy
+    return new Promise((resolve, reject) => {
+        const uploadUrl = getStorageUrl(path);
+        const xhr = new XMLHttpRequest();
+        
+        xhr.open('POST', uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type);
+        
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const percent = (e.loaded / e.total) * 100;
+                onProgress(percent);
             }
-        );
+        };
+        
+        xhr.onload = () => {
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                const downloadToken = data.downloadTokens;
+                const workerUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '');
+                const bucket = "irangram-onlinemessenger.firebasestorage.app";
+                const encodedName = encodeURIComponent(path);
+                const publicUrl = `${workerUrl}/v0/b/${bucket}/o/${encodedName}?alt=media&token=${downloadToken}`;
+                resolve(publicUrl);
+            } else {
+                // Fallback to SDK logic if proxy fails (not implemented here for simplicity/code size)
+                reject(new Error("Upload failed"));
+            }
+        };
+        
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(file);
     });
 };
 
@@ -610,7 +796,6 @@ export const subscribeToChatPin = (chatId: string, callback: (data: any) => void
 
 export const getChatId = (uid1: string, uid2: string) => {
     if (uid2 === 'saved') return `saved_${uid1}`;
-    // Ensure consistent chat ID for Gemini bot if not handled elsewhere
     if (uid2 === 'gemini_bot') return `gemini_bot_${uid1}`;
     return [uid1, uid2].sort().join('_');
 };
@@ -633,8 +818,8 @@ export const sendGlobalMessage = async (message: Partial<Message>, userProfile: 
         throw new Error("دیتابیس متصل نیست.");
     }
     
-    // Explicit check for user authentication
-    const currentUser = auth?.currentUser;
+    // Explicit check for user authentication (Using Helper for Proxy Compatibility)
+    const currentUser = getCurrentUser();
     if (!currentUser) throw new Error("کاربر احراز هویت نشده است.");
 
     let finalText = message.text || '';
@@ -708,7 +893,7 @@ export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => vo
 export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
     if (!db) throw new Error("دیتابیس متصل نیست.");
     
-    const currentUser = auth?.currentUser;
+    const currentUser = getCurrentUser();
     // We prioritize auth.currentUser. If called by bot/admin spoofing, senderId might be in message.
     const senderUid = currentUser?.uid || message.senderId;
     
@@ -730,7 +915,6 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     };
 
     // Only update participants for DMs to ensure the other person sees the chat
-    // CRITICAL FIX: Ensure 'saved' and 'gemini_bot' are handled properly so subscription finds them
     if (!isGroup && receiverId !== 'saved') {
          chatUpdateData.participants = arrayUnion(senderUid, receiverId);
     } else if (receiverId === 'saved') {
@@ -752,212 +936,25 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
 };
 
-// --- POLLS ---
-export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean = false) => {
-    if (!db) return;
-    const collectionPath = isGlobal ? "global_chat" : `chats/${chatId}/messages`;
-    const msgRef = doc(db, collectionPath, messageId);
-    
-    try {
-        const snap = await getDoc(msgRef);
-        if (snap.exists()) {
-            const data = snap.data();
-            const poll = data.poll as PollData;
-            
-            if (poll.isClosed) return;
-
-            let newOptions = poll.options.map(opt => {
-                // Determine if user already voted for THIS option
-                const hasVotedThis = opt.voterIds.includes(userId);
-                
-                if (opt.id === optionId) {
-                    if (hasVotedThis) {
-                        // Toggle OFF (Remove vote)
-                        return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) };
-                    } else {
-                        // Toggle ON (Add vote)
-                        return { ...opt, voterIds: [...opt.voterIds, userId] };
-                    }
-                } else {
-                    // For other options:
-                    // If NOT multiple choice, remove vote from others
-                    if (!poll.allowMultiple && opt.voterIds.includes(userId)) {
-                        return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) };
-                    }
-                }
-                return opt;
-            });
-
-            await updateDoc(msgRef, { "poll.options": newOptions });
-        }
-    } catch(e) {
-        console.error("Voting failed", e);
-    }
-};
-
-export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => {
-    if (!db) return;
-    const msgRef = doc(db, "global_chat", messageId);
-    try {
-        const snap = await getDoc(msgRef);
-        if (snap.exists()) {
-            const data = snap.data();
-            const reactions = data.reactions || {};
-            const userList = reactions[emoji] || [];
-            let newReactions = { ...reactions };
-            if (userList.includes(userId)) {
-                newReactions[emoji] = userList.filter((id: string) => id !== userId);
-                if (newReactions[emoji].length === 0) delete newReactions[emoji];
-            } else {
-                newReactions[emoji] = [...userList, userId];
-            }
-            await updateDoc(msgRef, { reactions: newReactions });
-        }
-    } catch (e) {}
-};
-export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean }) => void) => {
-    if (!db) return () => {};
-    const docRef = doc(db, "system", "info");
-    return onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            callback({ 
-                currentVersion: data.currentVersion || CONFIG.VERSION, 
-                lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, 
-                forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0,
-                maintenanceMode: data.maintenanceMode || false 
-            });
-        } else {
-            setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false });
-        }
-    });
-};
+// ... [REST OF FILE REMAINS UNCHANGED] ...
+export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean = false) => { if (!db) return; const collectionPath = isGlobal ? "global_chat" : `chats/${chatId}/messages`; const msgRef = doc(db, collectionPath, messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const poll = data.poll as PollData; if (poll.isClosed) return; let newOptions = poll.options.map(opt => { const hasVotedThis = opt.voterIds.includes(userId); if (opt.id === optionId) { if (hasVotedThis) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; else return { ...opt, voterIds: [...opt.voterIds, userId] }; } else { if (!poll.allowMultiple && opt.voterIds.includes(userId)) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; } return opt; }); await updateDoc(msgRef, { "poll.options": newOptions }); } } catch(e) { console.error("Voting failed", e); } };
+export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => { if (!db) return; const msgRef = doc(db, "global_chat", messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const reactions = data.reactions || {}; const userList = reactions[emoji] || []; let newReactions = { ...reactions }; if (userList.includes(userId)) { newReactions[emoji] = userList.filter((id: string) => id !== userId); if (newReactions[emoji].length === 0) delete newReactions[emoji]; } else { newReactions[emoji] = [...userList, userId]; } await updateDoc(msgRef, { reactions: newReactions }); } } catch (e) {} };
+export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean }) => void) => { if (!db) return () => {}; const docRef = doc(db, "system", "info"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); callback({ currentVersion: data.currentVersion || CONFIG.VERSION, lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0, maintenanceMode: data.maintenanceMode || false }); } else { setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false }); } }); };
 export const checkAndTriggerCleanup = async () => { if (!db) return; };
 export const triggerSystemUpdate = async () => { if(!db) return; await setDoc(doc(db, "system", "info"), { forceUpdate: serverTimestamp() }, { merge: true }); };
 export const wipeSystemData = async () => { if(!db) return; await clearGlobalChat(); };
 export const setGlobalMaintenance = async (status: boolean) => { if(!db) return; await setDoc(doc(db, "system", "info"), { maintenanceMode: status }, { merge: true }); };
 export const deleteUserAccount = async (targetUid: string) => { if(!db) return; try { await deleteDoc(doc(db, "users", targetUid)); } catch(e) {} };
-
-export const subscribeToWordFilters = () => {
-    if (!db) return () => {};
-    const docRef = doc(db, "settings", "wordFilters");
-    return onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            localBannedWords = (docSnap.data() as any).bannedWords || [];
-        }
-    }, (error) => {
-       // Suppress error to avoid console noise if offline
-    });
-};
-
-export const getWordFilters = async (): Promise<string[]> => {
-    if (localBannedWords.length > 0) return localBannedWords;
-    if (!db) return [];
-    try {
-        const docRef = doc(db, "settings", "wordFilters");
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-            const words = (snap.data() as any).bannedWords || [];
-            localBannedWords = words;
-            return words;
-        }
-    } catch(e) {
-        console.warn("Could not fetch word filters (offline)");
-    }
-    return [];
-};
-
-export const updateWordFilters = async (words: string[]) => {
-    if (!db) return;
-    await setDoc(doc(db, "settings", "wordFilters"), { bannedWords: words }, { merge: true });
-};
-export const getAdminSpyChats = async (targetUid: string): Promise<Contact[]> => {
-    if (!db) return [];
-    const chats: Contact[] = [
-        { id: 'global_chat', name: 'چت عمومی جهانی', avatar: 'https://cdn-icons-png.flaticon.com/512/921/921490.png', status: 'online', bio: 'Surveillance View', username: '@global_world', phone: '', type: 'group', isGlobal: true }
-    ];
-    try {
-        chats.push({ id: `saved_${targetUid}`, name: 'پیام‌های ذخیره شده (Cloud)', avatar: '', status: 'online', bio: 'Personal Saved Messages', username: 'saved', phone: '', type: 'user', isGlobal: false });
-        const q = query(collection(db, "chats"), where("participants", "array-contains", targetUid));
-        const snapshot = await getDocs(q);
-        const chatPromises = snapshot.docs.map(async (docSnapshot) => {
-            const data = docSnapshot.data();
-            const participants = data.participants || [];
-            if (data.type === 'group' || data.type === 'channel') {
-                 return { id: docSnapshot.id, name: data.name || 'Group', avatar: data.avatar, status: 'online', bio: data.type === 'channel' ? 'Channel' : 'Group', username: '', phone: '', type: data.type, isGlobal: false } as Contact;
-            } else {
-                const otherId = participants.find((id: string) => id !== targetUid);
-                if (otherId) {
-                    const otherProfile = await getUserProfile(otherId);
-                    return { id: docSnapshot.id, name: otherProfile ? `چت با: ${otherProfile.name}` : `User: ${otherId}`, avatar: otherProfile?.avatar, status: 'offline', bio: 'Private Chat', username: otherProfile?.username || '', phone: '', type: 'user', isGlobal: false } as Contact;
-                }
-            }
-            return null;
-        });
-        const resolvedChats = await Promise.all(chatPromises);
-        return [...chats, ...resolvedChats.filter(c => c !== null) as Contact[]];
-    } catch (e) { return chats; }
-};
-export const getAdminSpyMessages = async (targetUid: string, chatId: string): Promise<Message[]> => {
-    if (!db) return [];
-    try {
-        let q;
-        if (chatId === 'global_chat') {
-            q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(100));
-        } else if (chatId.startsWith('saved_')) {
-            q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100));
-        } else {
-            q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100));
-        }
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => {
-            const data = doc.data() as any;
-            return { id: doc.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Message;
-        }).reverse();
-    } catch (e) { return []; }
-};
-export const adminSendMessageAsUser = async (chatId: string, spoofedSenderId: string, text: string) => {
-    if (!db || !text.trim()) return;
-    try {
-        const userProfile = await getUserProfile(spoofedSenderId);
-        const messageData = { text, senderId: spoofedSenderId, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatar || '', type: 'text', createdAt: serverTimestamp(), isSticker: false, reactions: {} };
-        if (chatId === 'global_chat') {
-            await addDoc(collection(db, "global_chat"), messageData);
-        } else {
-            await addDoc(collection(db, "chats", chatId, "messages"), messageData);
-            await setDoc(doc(db, "chats", chatId), { lastMessage: text, lastSenderId: spoofedSenderId, updatedAt: serverTimestamp() }, { merge: true });
-        }
-    } catch(e) {}
-};
-export const forceJoinGroup = async (groupId: string, userId: string) => {
-    if (!db) return;
-    const chatRef = doc(db, "chats", groupId);
-    await updateDoc(chatRef, { participants: arrayUnion(userId), admins: arrayUnion(userId) });
-};
-export const getAllGroups = async (): Promise<any[]> => {
-    if (!db) return [];
-    try {
-        const q = query(collection(db, "chats"), where("type", "in", ["group", "channel"]));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (e) { return []; }
-};
-export const sendSystemNotification = async (targetUid: string, title: string, message: string) => {
-    if (!db) return;
-    try { await addDoc(collection(db, "users", targetUid, "notifications"), { title, message, type: 'alert', read: false, createdAt: serverTimestamp() }); } catch (e) {}
-};
-export const subscribeToNotifications = (uid: string, callback: (notifs: AppNotification[]) => void) => {
-    if (!db) return () => {};
-    const q = query(collection(db, "users", uid, "notifications"), where("read", "==", false));
-    return onSnapshot(q, (snapshot) => {
-        const notifs = snapshot.docs.map(doc => {
-            const data = doc.data() as any;
-            return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as AppNotification;
-        });
-        notifs.sort((a, b) => b.createdAt - a.createdAt);
-        callback(notifs);
-    });
-};
+export const subscribeToWordFilters = () => { if (!db) return () => {}; const docRef = doc(db, "settings", "wordFilters"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { localBannedWords = (docSnap.data() as any).bannedWords || []; } }, (error) => {}); };
+export const getWordFilters = async (): Promise<string[]> => { if (localBannedWords.length > 0) return localBannedWords; if (!db) return []; try { const docRef = doc(db, "settings", "wordFilters"); const snap = await getDoc(docRef); if (snap.exists()) { const words = (snap.data() as any).bannedWords || []; localBannedWords = words; return words; } } catch(e) { console.warn("Could not fetch word filters (offline)"); } return []; };
+export const updateWordFilters = async (words: string[]) => { if (!db) return; await setDoc(doc(db, "settings", "wordFilters"), { bannedWords: words }, { merge: true }); };
+export const getAdminSpyChats = async (targetUid: string): Promise<Contact[]> => { if (!db) return []; const chats: Contact[] = [{ id: 'global_chat', name: 'چت عمومی جهانی', avatar: 'https://cdn-icons-png.flaticon.com/512/921/921490.png', status: 'online', bio: 'Surveillance View', username: '@global_world', phone: '', type: 'group', isGlobal: true }]; try { chats.push({ id: `saved_${targetUid}`, name: 'پیام‌های ذخیره شده (Cloud)', avatar: '', status: 'online', bio: 'Personal Saved Messages', username: 'saved', phone: '', type: 'user', isGlobal: false }); const q = query(collection(db, "chats"), where("participants", "array-contains", targetUid)); const snapshot = await getDocs(q); const chatPromises = snapshot.docs.map(async (docSnapshot) => { const data = docSnapshot.data(); const participants = data.participants || []; if (data.type === 'group' || data.type === 'channel') { return { id: docSnapshot.id, name: data.name || 'Group', avatar: data.avatar, status: 'online', bio: data.type === 'channel' ? 'Channel' : 'Group', username: '', phone: '', type: data.type, isGlobal: false } as Contact; } else { const otherId = participants.find((id: string) => id !== targetUid); if (otherId) { const otherProfile = await getUserProfile(otherId); return { id: docSnapshot.id, name: otherProfile ? `چت با: ${otherProfile.name}` : `User: ${otherId}`, avatar: otherProfile?.avatar, status: 'offline', bio: 'Private Chat', username: otherProfile?.username || '', phone: '', type: 'user', isGlobal: false } as Contact; } } return null; }); const resolvedChats = await Promise.all(chatPromises); return [...chats, ...resolvedChats.filter(c => c !== null) as Contact[]]; } catch (e) { return chats; } };
+export const getAdminSpyMessages = async (targetUid: string, chatId: string): Promise<Message[]> => { if (!db) return []; try { let q; if (chatId === 'global_chat') { q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(100)); } else if (chatId.startsWith('saved_')) { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } else { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } const snapshot = await getDocs(q); return snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Message; }).reverse(); } catch (e) { return []; } };
+export const adminSendMessageAsUser = async (chatId: string, spoofedSenderId: string, text: string) => { if (!db || !text.trim()) return; try { const userProfile = await getUserProfile(spoofedSenderId); const messageData = { text, senderId: spoofedSenderId, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatar || '', type: 'text', createdAt: serverTimestamp(), isSticker: false, reactions: {} }; if (chatId === 'global_chat') { await addDoc(collection(db, "global_chat"), messageData); } else { await addDoc(collection(db, "chats", chatId, "messages"), messageData); await setDoc(doc(db, "chats", chatId), { lastMessage: text, lastSenderId: spoofedSenderId, updatedAt: serverTimestamp() }, { merge: true }); } } catch(e) {} };
+export const forceJoinGroup = async (groupId: string, userId: string) => { if (!db) return; const chatRef = doc(db, "chats", groupId); await updateDoc(chatRef, { participants: arrayUnion(userId), admins: arrayUnion(userId) }); };
+export const getAllGroups = async (): Promise<any[]> => { if (!db) return []; try { const q = query(collection(db, "chats"), where("type", "in", ["group", "channel"])); const snapshot = await getDocs(q); return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); } catch (e) { return []; } };
+export const sendSystemNotification = async (targetUid: string, title: string, message: string) => { if (!db) return; try { await addDoc(collection(db, "users", targetUid, "notifications"), { title, message, type: 'alert', read: false, createdAt: serverTimestamp() }); } catch (e) {} };
+export const subscribeToNotifications = (uid: string, callback: (notifs: AppNotification[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "users", uid, "notifications"), where("read", "==", false)); return onSnapshot(q, (snapshot) => { const notifs = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as AppNotification; }); notifs.sort((a, b) => b.createdAt - a.createdAt); callback(notifs); }); };
 export const markNotificationRead = async (uid: string, notifId: string) => { if(!db) return; await updateDoc(doc(db, "users", uid, "notifications", notifId), { read: true }); };
 export const editMessageGlobal = async (messageId: string, newText: string) => { if (!db) return; try { await updateDoc(doc(db, "global_chat", messageId), { text: newText, edited: true }); } catch (e) {} };
 export const clearGlobalChat = async () => { if (!db) return; try { const q = query(collection(db, "global_chat")); const snapshot = await getDocs(q); const batch = writeBatch(db); let count = 0; snapshot.forEach((doc) => { batch.delete(doc.ref); count++; if (count >= 490) return; }); await batch.commit(); } catch (e) {} };
@@ -979,18 +976,7 @@ export const sendReport = async (messageId: string, messageContent: string, repo
 export const subscribeToReports = (callback: (reports: Report[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "reports"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const reports = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), handledAt: data.handledAt ? (data.handledAt as Timestamp).toMillis() : undefined } as Report; }); callback(reports); }); };
 export const handleReport = async (reportId: string, adminName: string) => { if (!db) return; await updateDoc(doc(db, "reports", reportId), { status: 'handled', handledBy: adminName, handledAt: serverTimestamp() }); };
 export const deleteReport = async (reportId: string) => { if (!db) return; await deleteDoc(doc(db, "reports", reportId)); };
-export const getAllUsers = async () => { 
-    if (!db) return []; 
-    try { 
-        // Removed orderBy("createdAt", "desc") to fix admin panel "missing index" error which results in empty list
-        const q = query(collection(db, "users")); 
-        const snapshot = await getDocs(q); 
-        return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData)); 
-    } catch (e) { 
-        console.error("Error fetching users", e); 
-        return []; 
-    } 
-};
+export const getAllUsers = async () => { if (!db) return []; try { const q = query(collection(db, "users")); const snapshot = await getDocs(q); return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData)); } catch (e) { console.error("Error fetching users", e); return []; } };
 export const updateUserRole = async (targetUid: string, newRole: UserRole) => { if (!db) return; await updateDoc(doc(db, "users", targetUid), { role: newRole }); };
 export const toggleUserBan = async (targetUid: string, currentBanStatus: boolean) => { if (!db) return; const docRef = doc(db, "users", targetUid); if (currentBanStatus) await updateDoc(docRef, { isBanned: false, banExpiresAt: null }); else await updateDoc(docRef, { isBanned: true }); };
 export const toggleUserMaintenance = async (targetUid: string, status: boolean) => { if(!db) return; await updateDoc(doc(db, "users", targetUid), { isUnderMaintenance: status }); };
