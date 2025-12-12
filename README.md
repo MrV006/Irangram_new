@@ -1,11 +1,35 @@
-<div align="center">
+# Irangram Messenger (ایران‌گرام)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+![Irangram Logo](https://cdn-icons-png.flaticon.com/512/2111/2111615.png)
 
-  <h1>Built with AI Studio</h2>
+**Irangram** is a sophisticated, high-performance real-time messaging application designed to provide a seamless communication experience similar to Telegram, but tailored with unique features and a localized interface.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 🚀 Features
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+*   **Real-time Messaging:** Instant delivery of messages, powered by a robust backend.
+*   **Global Chat:** Connect with users worldwide in a live, synchronized environment.
+*   **Media Sharing:** Send photos, voice messages, and files securely.
+*   **Voice Calls:** Simulated interface for high-quality voice calls.
+*   **Admin Panel:** Advanced management tools for banning users, monitoring chats, and filtering content.
+*   **Customization:** Dark/Light mode, custom wallpapers, and account switching.
+*   **PWA Support:** Installable on Android, iOS, and Desktop as a native app.
 
-</div>
+## 🛠 Technologies
+
+Built with modern web technologies for performance and scalability:
+*   **Frontend:** React 19, TypeScript, Tailwind CSS
+*   **Backend:** Firebase (Firestore, Auth, Storage)
+*   **Build Tool:** Vite
+
+## 👨‍💻 Developer
+
+**Designed & Developed by Mr.V**
+
+Irangram is the result of dedicated engineering to create a fast, secure, and user-friendly platform.
+
+### Contact Me
+*   **Phone:** `09902076468`
+*   **GitHub:** [View Profile](https://github.com/mrv006)
+
+---
+© 2024 Irangram. All rights reserved.

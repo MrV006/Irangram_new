@@ -1,0 +1,1038 @@
+
+import React, { useRef, useEffect, useState, useMemo } from 'react';
+import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Contact, Message, UserRole, PollData } from '../types';
+import ImageModal from './ImageModal';
+import MessageBubble from './MessageBubble';
+import { clearGlobalChat, sendReport, blockUser, checkBlockedStatus, unblockUser, isGroupAdmin, uploadMediaWithProgress, castPollVote, getChatId } from '../services/firebaseService';
+
+interface ChatWindowProps {
+  contact: Contact;
+  messages: Message[];
+  myId: string;
+  myRole: UserRole;
+  pinnedMessage?: { id: string; text: string; sender: string; type: string } | null;
+  onSendMessage: (content: any, replyToId?: string) => void;
+  onEditMessage: (messageId: string, newText: string) => void;
+  onDeleteMessage: (messageId: string) => void;
+  onPinMessage: (message: Message) => void;
+  onUnpinMessage: () => void;
+  onReaction: (messageId: string, emoji: string) => void;
+  onBack: () => void;
+  isMobile: boolean;
+  onProfileClick: () => void;
+  onAvatarClick?: (senderProfile: Partial<Contact>) => void;
+  wallpaper: string;
+  onCall: (isVideo: boolean) => void;
+  onClearHistory?: () => void;
+  onDeleteChat?: () => void;
+  onBlockUser?: () => void;
+  onTyping?: (isTyping: boolean) => void;
+  onForwardMessage?: (message: Message) => void;
+}
+
+const COMMON_EMOJIS = ["😀", "😂", "🥰", "😎", "🤔", "😭", "👍", "👎", "❤️", "🔥", "👀", "✅", "💯", "🌹"];
+
+// Mock Stickers (Using public URLs)
+const STICKERS = [
+    "https://cdn-icons-png.flaticon.com/512/9373/9373977.png",
+    "https://cdn-icons-png.flaticon.com/512/9374/9374028.png",
+    "https://cdn-icons-png.flaticon.com/512/9373/9373956.png",
+    "https://cdn-icons-png.flaticon.com/512/9373/9373945.png",
+    "https://cdn-icons-png.flaticon.com/512/9373/9373983.png",
+    "https://cdn-icons-png.flaticon.com/512/9374/9374003.png",
+    "https://cdn-icons-png.flaticon.com/512/9373/9373925.png",
+    "https://cdn-icons-png.flaticon.com/512/9374/9374011.png"
+];
+
+const GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKSjRrfIPjeiVyM/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0HlHFRbmaZtBRhXG/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26BRv0ThflsHCqDrG/giphy.gif"
+];
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ 
+  contact, messages, myId, myRole, pinnedMessage, onSendMessage, onEditMessage, onDeleteMessage, onPinMessage, onUnpinMessage, onReaction, onBack, isMobile, onProfileClick, onAvatarClick, wallpaper, onCall, onClearHistory, onDeleteChat, onBlockUser, onTyping, onForwardMessage
+}) => {
+  const [inputValue, setInputValue] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, message: Message, isMe: boolean } | null>(null);
+  
+  // Emoji/Sticker Panel
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'emoji' | 'sticker' | 'gif'>('emoji');
+
+  // Poll Creator
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
+
+  // Gallery
+  const [viewingImageId, setViewingImageId] = useState<string | null>(null);
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [amIBlocked, setAmIBlocked] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [canWrite, setCanWrite] = useState(true);
+  const [canPin, setCanPin] = useState(false);
+  const [myPermissions, setMyPermissions] = useState<any>(null); // For granular permissions
+  
+  // Search State
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Scroll Button State
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  // Slow Mode
+  const [slowModeCooldown, setSlowModeCooldown] = useState(0);
+
+  // Media Upload State
+  const [pendingAttachment, setPendingAttachment] = useState<{ file: File; type: 'image' | 'file'; previewUrl?: string } | null>(null);
+  const [attachmentCaption, setAttachmentCaption] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  // Recording State (Audio & Video)
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<'audio' | 'video'>('audio'); // Toggle
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null); // For Video Note preview while recording
+
+  // Audio Playback State
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [audioProgress, setAudioProgress] = useState(0); // For progress bar animation
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const genericFileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<any>(null);
+  
+  const isGroup = contact.type === 'group';
+  const isChannel = contact.type === 'channel';
+  const isGlobalChat = contact.id === 'global_chat';
+  const draftKey = `draft_${myId}_${contact.id}`;
+  const isSystemAdmin = myRole === 'owner' || myRole === 'developer';
+
+  // --- Derived State for Gallery ---
+  const chatImages = useMemo(() => {
+      return messages
+          .filter(m => m.type === 'image' && m.imageUrl)
+          .map(m => ({ url: m.imageUrl!, id: m.id }))
+          .reverse(); // Ensure chronological order if messages are reverse
+  }, [messages]);
+
+  // Permissions & Blocks
+  useEffect(() => {
+      const checkPermissions = async () => {
+          if (isSystemAdmin) {
+              setCanWrite(true);
+              setCanPin(true);
+              setMyPermissions({ canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: true });
+              return;
+          }
+          if ((isChannel || isGroup) && !isGlobalChat) {
+              // Check if user is creator
+              const isCreator = contact.creatorId === myId;
+              if (isCreator) {
+                  setCanWrite(true);
+                  setCanPin(true);
+                  setMyPermissions({ canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: true });
+                  return;
+              }
+
+              // Check granular permissions
+              const perms = contact.adminPermissions?.[myId];
+              if (perms) {
+                  setMyPermissions(perms);
+                  setCanPin(perms.canPinMessages);
+                  setCanWrite(true); // Admins can generally write
+              } else {
+                  // Regular member
+                  setMyPermissions(null);
+                  setCanPin(false);
+                  if (isChannel) {
+                      setCanWrite(false);
+                  } else {
+                      setCanWrite(true);
+                  }
+              }
+          } else {
+              // Private Chat or Global
+              setCanWrite(true);
+              setCanPin(true); 
+              setMyPermissions(null);
+          }
+      };
+      checkPermissions();
+  }, [contact, myId, myRole, isChannel, isGroup, isSystemAdmin]);
+
+  useEffect(() => {
+     const checkBlock = async () => {
+         if (contact.id !== 'global_chat' && contact.id !== 'saved' && contact.type === 'user') {
+             const blockedByMe = await checkBlockedStatus(myId, contact.id);
+             setIsBlockedByMe(blockedByMe);
+             const blockedMe = await checkBlockedStatus(contact.id, myId);
+             setAmIBlocked(blockedMe);
+         } else {
+             setIsBlockedByMe(false);
+             setAmIBlocked(false);
+         }
+     };
+     checkBlock();
+  }, [contact.id, myId]);
+
+  // Slow Mode Logic
+  useEffect(() => {
+      if (contact.slowMode && contact.slowMode > 0 && !myPermissions && !isSystemAdmin && contact.creatorId !== myId) {
+          // Check last message time
+          const myMessages = messages.filter(m => m.senderId === myId);
+          if (myMessages.length > 0) {
+              const lastMsgTime = myMessages[myMessages.length - 1].timestamp;
+              const now = Date.now();
+              const diff = (now - lastMsgTime) / 1000;
+              if (diff < contact.slowMode) {
+                  setSlowModeCooldown(contact.slowMode - Math.floor(diff));
+                  const timer = setInterval(() => {
+                      setSlowModeCooldown(prev => {
+                          if (prev <= 1) {
+                              clearInterval(timer);
+                              return 0;
+                          }
+                          return prev - 1;
+                      });
+                  }, 1000);
+                  return () => clearInterval(timer);
+              }
+          }
+      }
+      setSlowModeCooldown(0);
+  }, [messages, contact.slowMode, myId, myPermissions]);
+
+  // Listen for Poll Votes
+  useEffect(() => {
+      const handlePollVote = (e: CustomEvent) => {
+          const { messageId, optionId } = e.detail;
+          const isGlobal = contact.id === 'global_chat';
+          // Determine Chat ID
+          let chatId = isGlobal ? 'global_chat' : getChatId(myId, contact.id);
+          // If group, chat id is contact.id
+          if (contact.type === 'group' || contact.type === 'channel') chatId = contact.id;
+          
+          castPollVote(chatId, messageId, optionId, myId, isGlobal);
+      };
+      window.addEventListener('poll-vote', handlePollVote as EventListener);
+      return () => window.removeEventListener('poll-vote', handlePollVote as EventListener);
+  }, [contact.id, myId]);
+
+  // Drafts
+  useEffect(() => {
+    const savedDraft = localStorage.getItem(draftKey);
+    if (savedDraft) setInputValue(savedDraft);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (editingMessage) return;
+    if (inputValue) localStorage.setItem(draftKey, inputValue);
+    else localStorage.removeItem(draftKey);
+  }, [inputValue, draftKey, editingMessage]);
+  
+  // Scroll to bottom on new message
+  useEffect(() => {
+    if (!isSearching) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [messages.length, replyingTo, isRecording, isSearching]);
+
+  // Audio Player Cleanup
+  useEffect(() => {
+      return () => {
+          if (audioPlayerRef.current) {
+              audioPlayerRef.current.pause();
+              audioPlayerRef.current = null;
+          }
+      };
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setInputValue(e.target.value);
+      if (onTyping) {
+          onTyping(true);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => {
+              onTyping(false);
+          }, 2000);
+      }
+  };
+
+  const handleSend = () => {
+    if (!inputValue.trim() || !canWrite) return;
+    if (isBlockedByMe || amIBlocked) return; 
+    
+    if (editingMessage) { 
+        onEditMessage(editingMessage.id, inputValue); 
+        setEditingMessage(null); 
+    } else { 
+        onSendMessage({ text: inputValue, type: 'text' }, replyingTo?.id); 
+        setReplyingTo(null); 
+    }
+    setInputValue('');
+    if(onTyping) onTyping(false);
+  };
+
+  const handleSendPoll = () => {
+      if (!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2) {
+          alert("لطفاً سوال و حداقل دو گزینه وارد کنید.");
+          return;
+      }
+      
+      const options = pollOptions.filter(o => o.trim()).map((text, index) => ({
+          id: `opt_${Date.now()}_${index}`,
+          text,
+          voterIds: []
+      }));
+
+      onSendMessage({
+          type: 'poll',
+          text: 'نظرسنجی', // Fallback text
+          poll: {
+              question: pollQuestion,
+              options: options,
+              allowMultiple: pollAllowMultiple,
+              isClosed: false
+          }
+      });
+      setShowPollCreator(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+  };
+
+  const handleSendSticker = (url: string, type: 'sticker' | 'image' = 'sticker') => {
+      if (!canWrite) return;
+      onSendMessage({ 
+          type: type,
+          imageUrl: url, 
+          text: type === 'sticker' ? 'استیکر' : 'GIF',
+          isSticker: type === 'sticker'
+      });
+      setShowEmojiPicker(false);
+  };
+
+  const processFile = (file?: File, type: 'image' | 'file' = 'image') => {
+      if (!file || isBlockedByMe || amIBlocked || !canWrite) return;
+      
+      let previewUrl;
+      if (type === 'image') {
+          previewUrl = URL.createObjectURL(file);
+      }
+      
+      setPendingAttachment({ file, type, previewUrl });
+      setAttachmentCaption('');
+  };
+
+  const handleSendAttachment = async () => {
+      if (!pendingAttachment || !canWrite) return;
+      
+      setUploadProgress(0);
+      try {
+          const folder = pendingAttachment.type === 'image' ? 'images' : 'files';
+          const path = `uploads/${myId}/${folder}/${Date.now()}_${pendingAttachment.file.name}`;
+          
+          const downloadUrl = await uploadMediaWithProgress(
+              pendingAttachment.file, 
+              path, 
+              (progress) => setUploadProgress(progress)
+          );
+
+          const fileSize = (pendingAttachment.file.size / 1024 / 1024).toFixed(2) + ' MB';
+          
+          onSendMessage({
+              type: pendingAttachment.type,
+              imageUrl: pendingAttachment.type === 'image' ? downloadUrl : undefined,
+              fileUrl: downloadUrl,
+              fileName: pendingAttachment.file.name,
+              fileSize: fileSize,
+              text: attachmentCaption || (pendingAttachment.type === 'image' ? 'عکس' : pendingAttachment.file.name)
+          }, replyingTo?.id);
+
+      } catch (e) {
+          console.error("Upload failed", e);
+          alert("خطا در آپلود فایل.");
+      } finally {
+          setUploadProgress(null);
+          setPendingAttachment(null);
+          setAttachmentCaption('');
+          setReplyingTo(null);
+      }
+  };
+
+  // --- Recording Logic (Audio & Video) ---
+  const toggleRecordingMode = () => {
+      setRecordingMode(prev => prev === 'audio' ? 'video' : 'audio');
+  };
+
+  const startRecording = async () => {
+    try {
+      const constraints = recordingMode === 'audio' 
+          ? { audio: true } 
+          : { audio: true, video: { facingMode: "user", width: 400, height: 400 } };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      // For video preview
+      if (recordingMode === 'video' && videoPreviewRef.current) {
+          videoPreviewRef.current.srcObject = stream;
+          videoPreviewRef.current.muted = true; // Avoid feedback
+          videoPreviewRef.current.play();
+      }
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      if(onTyping) onTyping(true); 
+    } catch (err) {
+      console.error("Error accessing media devices:", err);
+      alert(`دسترسی به ${recordingMode === 'audio' ? 'میکروفون' : 'دوربین'} امکان‌پذیر نیست.`);
+    }
+  };
+
+  const stopAndSendRecording = () => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+    
+    mediaRecorderRef.current.onstop = async () => {
+        const mimeType = recordingMode === 'audio' ? 'audio/webm' : 'video/webm';
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const fileExt = recordingMode === 'audio' ? 'webm' : 'webm';
+        const file = new File([blob], `recording.${fileExt}`, { type: mimeType });
+        
+        const minutes = Math.floor(recordingDuration / 60);
+        const seconds = recordingDuration % 60;
+        const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        setUploadProgress(0);
+        try {
+            const folder = recordingMode === 'audio' ? 'audios' : 'videos';
+            const path = `uploads/${myId}/${folder}/${Date.now()}_${recordingMode}.${fileExt}`;
+            const downloadUrl = await uploadMediaWithProgress(file, path, (p) => setUploadProgress(p));
+            
+            onSendMessage({
+                type: recordingMode === 'audio' ? 'audio' : 'video_note',
+                fileUrl: downloadUrl,
+                fileName: recordingMode === 'audio' ? 'Voice Message' : 'Video Note',
+                audioDuration: durationStr,
+                text: recordingMode === 'audio' ? 'پیام صوتی' : 'پیام ویدیویی'
+            }, replyingTo?.id);
+        } catch(e) {
+            console.error("Recording upload failed", e);
+        } finally {
+            setUploadProgress(null);
+        }
+        
+        if (mediaRecorderRef.current?.stream) {
+             mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+        }
+    };
+
+    mediaRecorderRef.current.stop();
+    clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setRecordingDuration(0);
+    if(onTyping) onTyping(false);
+  };
+
+  const cancelRecording = () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+      }
+      clearInterval(recordingTimerRef.current);
+      setIsRecording(false);
+      setRecordingDuration(0);
+      if(onTyping) onTyping(false);
+  };
+
+  const formatDuration = (seconds: number) => {
+      const min = Math.floor(seconds / 60);
+      const sec = seconds % 60;
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  // --- Audio Player Logic ---
+  const toggleAudio = (messageId: string, url?: string) => {
+      if (!url) return;
+
+      if (playingAudioId === messageId) {
+          audioPlayerRef.current?.pause();
+          setPlayingAudioId(null);
+          setAudioProgress(0);
+      } else {
+          if (audioPlayerRef.current) {
+              audioPlayerRef.current.pause();
+          }
+          const audio = new Audio(url);
+          audio.ontimeupdate = () => {
+              if (audio.duration) {
+                  setAudioProgress((audio.currentTime / audio.duration) * 100);
+              }
+          };
+          audio.onended = () => {
+              setPlayingAudioId(null);
+              setAudioProgress(0);
+          };
+          audio.play().catch(e => console.error("Play error", e));
+          audioPlayerRef.current = audio;
+          setPlayingAudioId(messageId);
+      }
+  };
+
+  const scrollToMessage = (id: string) => {
+      const el = document.getElementById(`msg-${id}`);
+      if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const bubble = el.querySelector('div[class*="rounded"]'); // Target the bubble
+          if (bubble) {
+              bubble.classList.add('ring-2', 'ring-telegram-primary', 'ring-offset-2', 'transition-all');
+              setTimeout(() => bubble.classList.remove('ring-2', 'ring-telegram-primary', 'ring-offset-2'), 1500);
+          }
+      }
+  };
+
+  const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScroll = () => {
+      if (!chatContainerRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+      const isBottom = scrollHeight - scrollTop - clientHeight < 150;
+      setShowScrollButton(!isBottom);
+  };
+
+  const getStatusText = () => {
+      if (contact.status === 'typing...') return <span className="text-telegram-primary animate-pulse font-bold">در حال نوشتن...</span>;
+      if (contact.status === 'online') return <span className="text-telegram-primary">آنلاین</span>;
+      if (isChannel) return 'کانال';
+      if (isGroup) return 'گروه';
+      if (contact.id === 'saved') return 'فضای ابری';
+      return contact.lastSeen ? `آخرین بازدید ${new Date(contact.lastSeen).toLocaleTimeString('fa-IR', {hour: '2-digit', minute:'2-digit'})}` : 'آفلاین';
+  };
+
+  // --- Message Filtering & Date Grouping ---
+  const filteredMessages = useMemo(() => {
+      if (!isSearching || !searchQuery.trim()) return messages;
+      return messages.filter(m => 
+          m.text.toLowerCase().includes(searchQuery.toLowerCase()) || 
+          m.fileName?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+  }, [messages, isSearching, searchQuery]);
+
+  const renderDateBadge = (timestamp: number) => {
+      const date = new Date(timestamp);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      let label = date.toLocaleDateString('fa-IR', { month: 'long', day: 'numeric' });
+      if (date.toDateString() === today.toDateString()) label = 'امروز';
+      else if (date.toDateString() === yesterday.toDateString()) label = 'دیروز';
+
+      return (
+          <div className="flex justify-center my-4 sticky top-2 z-20">
+              <span className="bg-black/40 dark:bg-white/10 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm shadow-sm font-bold">
+                  {label}
+              </span>
+          </div>
+      );
+  };
+
+  // Reply via Swipe Handler
+  const handleReplySwipe = (msg: Message) => {
+      setReplyingTo(msg);
+      inputRef.current?.focus();
+  };
+
+  return (
+    <div 
+        className="h-full flex flex-col relative bg-telegram-bg dark:bg-telegram-bgDark overflow-hidden"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={(e) => { e.preventDefault(); if(!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false); }}
+        onDrop={(e) => {
+            e.preventDefault(); setIsDragging(false);
+            if(isBlockedByMe || amIBlocked || !canWrite) return;
+            const file = e.dataTransfer.files?.[0];
+            processFile(file, file?.type.startsWith('image/') ? 'image' : 'file');
+        }}
+    >
+        {isDragging && canWrite && (
+            <div className="absolute inset-0 z-50 bg-telegram-primary/80 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-fade-in">
+                <Paperclip size={64} className="mb-4 animate-bounce" />
+                <h2 className="text-2xl font-bold">رها کنید تا ارسال شود</h2>
+            </div>
+        )}
+
+        {/* Attachment Preview Modal */}
+        {pendingAttachment && (
+            <div className="fixed inset-0 z-[70] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in">
+                <div className="flex-1 w-full max-w-2xl flex items-center justify-center relative">
+                    {pendingAttachment.type === 'image' ? (
+                        <img src={pendingAttachment.previewUrl} className="max-w-full max-h-[70vh] rounded-lg shadow-2xl object-contain" />
+                    ) : (
+                        <div className="bg-white/10 p-10 rounded-2xl flex flex-col items-center text-white">
+                            <FileText size={64} className="mb-4" />
+                            <span className="text-xl font-bold">{pendingAttachment.file.name}</span>
+                            <span className="text-sm opacity-70 mt-2">{(pendingAttachment.file.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                    )}
+                    <button onClick={() => setPendingAttachment(null)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white">
+                        <X size={24} />
+                    </button>
+                </div>
+                
+                {/* Caption Input */}
+                <div className="w-full max-w-2xl mt-4 flex gap-2 items-end">
+                    <div className="flex-1 bg-white/10 rounded-2xl flex items-center p-2 border border-white/20">
+                        <textarea 
+                            value={attachmentCaption}
+                            onChange={(e) => setAttachmentCaption(e.target.value)}
+                            placeholder="افزودن کپشن..."
+                            className="w-full bg-transparent text-white placeholder-white/50 border-none focus:ring-0 resize-none max-h-32 min-h-[44px] py-2 px-2"
+                            rows={1}
+                        />
+                    </div>
+                    <button 
+                        onClick={handleSendAttachment} 
+                        className="p-3 bg-telegram-primary text-white rounded-full shadow-lg hover:bg-telegram-primaryDark transition-all"
+                    >
+                        <Send size={24} />
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Upload Progress Overlay */}
+        {uploadProgress !== null && (
+            <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl w-64 text-center">
+                    <Loader2 className="animate-spin w-10 h-10 text-telegram-primary mx-auto mb-4" />
+                    <h3 className="font-bold text-gray-900 dark:text-white mb-2">در حال ارسال...</h3>
+                    <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-telegram-primary transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                    </div>
+                    <span className="text-xs text-gray-500 mt-2 block font-mono">{Math.round(uploadProgress)}%</span>
+                </div>
+            </div>
+        )}
+
+        {/* Poll Creator Modal */}
+        {showPollCreator && (
+            <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">ساخت نظرسنجی</h3>
+                    <div className="space-y-3">
+                        <input 
+                            value={pollQuestion}
+                            onChange={(e) => setPollQuestion(e.target.value)}
+                            placeholder="سوال نظرسنجی..."
+                            className="w-full p-3 rounded-xl border bg-gray-50 dark:bg-black/20 dark:border-gray-600 outline-none focus:border-telegram-primary"
+                        />
+                        {pollOptions.map((opt, i) => (
+                            <input 
+                                key={i}
+                                value={opt}
+                                onChange={(e) => {
+                                    const newOpts = [...pollOptions];
+                                    newOpts[i] = e.target.value;
+                                    setPollOptions(newOpts);
+                                }}
+                                placeholder={`گزینه ${i + 1}`}
+                                className="w-full p-3 rounded-xl border bg-gray-50 dark:bg-black/20 dark:border-gray-600 outline-none focus:border-telegram-primary"
+                            />
+                        ))}
+                        <button onClick={() => setPollOptions([...pollOptions, ''])} className="text-telegram-primary text-sm font-bold">+ افزودن گزینه</button>
+                        <div className="flex items-center gap-2 mt-4 cursor-pointer" onClick={() => setPollAllowMultiple(!pollAllowMultiple)}>
+                            <div className={`w-5 h-5 border-2 rounded ${pollAllowMultiple ? 'bg-telegram-primary border-telegram-primary' : 'border-gray-400'} flex items-center justify-center`}>
+                                {pollAllowMultiple && <Check size={14} className="text-white" />}
+                            </div>
+                            <span className="text-sm">انتخاب چندگانه</span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 mt-6">
+                        <button onClick={() => setShowPollCreator(false)} className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-xl text-sm font-bold">انصراف</button>
+                        <button onClick={handleSendPoll} className="flex-1 py-2 bg-telegram-primary text-white rounded-xl text-sm font-bold">ایجاد نظرسنجی</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Gallery Modal */}
+        {viewingImageId && chatImages.length > 0 && (
+            <ImageModal 
+                images={chatImages} 
+                initialImageId={viewingImageId} 
+                onClose={() => setViewingImageId(null)} 
+            />
+        )}
+        
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => processFile(e.target.files?.[0], 'image')} />
+        <input type="file" ref={genericFileInputRef} className="hidden" onChange={(e) => processFile(e.target.files?.[0], 'file')} />
+
+        <div className="absolute inset-0 z-0" style={{ backgroundColor: wallpaper === 'default' ? '#99bad0' : wallpaper.startsWith('http') || wallpaper.startsWith('data') ? undefined : wallpaper, backgroundImage: wallpaper.startsWith('http') || wallpaper.startsWith('data') ? `url(${wallpaper})` : undefined, backgroundSize: 'cover' }}></div>
+
+        {/* Header */}
+        <div className="relative z-50 flex flex-col shrink-0 bg-white/80 dark:bg-telegram-bgDark/80 backdrop-blur-xl border-b border-gray-100 dark:border-white/5 shadow-sm transition-all duration-300">
+            {isSearching ? (
+                <div className="flex items-center px-3 py-2 h-16 gap-3 animate-fade-in">
+                    <button onClick={() => { setIsSearching(false); setSearchQuery(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-gray-500">
+                        <ArrowRight size={22} />
+                    </button>
+                    <div className="flex-1 bg-gray-100 dark:bg-black/20 rounded-full flex items-center px-4">
+                        <Search size={18} className="text-gray-400" />
+                        <input 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 bg-transparent border-none focus:ring-0 py-2 px-2 text-sm"
+                            placeholder="جستجو در این چت..."
+                            autoFocus
+                        />
+                    </div>
+                    <div className="text-xs text-gray-500 font-mono">
+                        {filteredMessages.length} یافت شد
+                    </div>
+                </div>
+            ) : (
+                <div className="flex items-center justify-between px-3 py-2 h-16 animate-fade-in relative">
+                     <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={onProfileClick}>
+                        {isMobile && <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="p-2 -mr-2 text-gray-500"><ArrowRight size={22} /></button>}
+                        <img src={contact.avatar || ''} className="w-10 h-10 rounded-full bg-gray-200 object-cover shrink-0" />
+                        <div className="flex flex-col overflow-hidden">
+                            <h2 className="font-bold text-gray-900 dark:text-white truncate text-base flex items-center gap-1">
+                                {contact.name}
+                                {contact.isGlobal && <Globe size={12} className="text-blue-500"/>}
+                            </h2>
+                            <span className="text-xs text-gray-500 truncate">{getStatusText()}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center text-gray-500 gap-1">
+                        <button onClick={() => setIsSearching(true)} className="p-2.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Search size={20} /></button>
+                        {!isGlobalChat && !isChannel && (
+                            <>
+                                <button onClick={() => onCall(false)} className="p-2.5 rounded-full text-telegram-primary hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Phone size={20} /></button>
+                                <button onClick={() => onCall(true)} className="p-2.5 rounded-full text-telegram-primary hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Video size={20} /></button>
+                            </>
+                        )}
+                        <button onClick={() => setShowChatMenu(!showChatMenu)} className="p-2.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors relative z-50"><MoreVertical size={20} /></button>
+                        
+                        {/* Improved Dropdown Menu with better visibility and logic */}
+                        {showChatMenu && (
+                            <>
+                                <div className="fixed inset-0 z-[60]" onClick={() => setShowChatMenu(false)}></div>
+                                <div className="absolute top-12 left-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-700 py-2 z-[70] animate-fade-in flex flex-col">
+                                    {!isGlobalChat && contact.id !== 'saved' && (
+                                        <>
+                                            <button onClick={onClearHistory} className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200"><Eraser size={18} /> پاک کردن تاریخچه</button>
+                                            <button onClick={onDeleteChat} className="w-full text-right px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm"><Trash2 size={18} /> حذف گفتگو</button>
+                                            {contact.type === 'user' && <button onClick={onBlockUser} className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200"><Ban size={18} /> {isBlockedByMe ? 'رفع مسدودی' : 'مسدود کردن'}</button>}
+                                        </>
+                                    )}
+                                    {isGlobalChat && isSystemAdmin && (
+                                         <button onClick={onClearHistory} className="w-full text-right px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm"><Trash2 size={18} /> پاکسازی چت جهانی</button>
+                                    )}
+                                    {(isGroup || isChannel) && canWrite && (
+                                        <button onClick={() => { setShowPollCreator(true); setShowChatMenu(false); }} className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200"><BarChart2 size={18} /> ایجاد نظرسنجی</button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Pinned Message Header */}
+            {pinnedMessage && !isSearching && (
+                <div 
+                    onClick={() => scrollToMessage(pinnedMessage.id)}
+                    className="flex items-center justify-between px-3 py-2 bg-white/95 dark:bg-gray-800/95 border-b border-gray-100 dark:border-gray-700 backdrop-blur-sm cursor-pointer relative animate-slide-in"
+                >
+                    <div className="flex items-center gap-2 border-l-2 border-telegram-primary pl-2 overflow-hidden">
+                       <div className="flex flex-col min-w-0">
+                           <span className="text-xs font-bold text-telegram-primary">پیام سنجاق شده</span>
+                           <span className="text-xs truncate opacity-80 text-gray-700 dark:text-gray-300">{pinnedMessage.text}</span>
+                       </div>
+                    </div>
+                    {canPin && (
+                        <button onClick={(e) => { e.stopPropagation(); onUnpinMessage(); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                            <X size={14} className="text-gray-500" />
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+
+        {/* Messages */}
+        <div ref={chatContainerRef} onScroll={handleScroll} className="relative z-10 flex-1 overflow-y-auto p-2 sm:p-4 flex flex-col gap-0.5 scroll-smooth">
+            <AnimatePresence initial={false}>
+                {filteredMessages.map((msg, index) => {
+                    const isMe = msg.senderId === 'me' || msg.senderId === myId;
+                    
+                    // Grouping Logic
+                    const prevMsg = filteredMessages[index - 1];
+                    const nextMsg = filteredMessages[index + 1];
+                    
+                    const isPrevSame = prevMsg && prevMsg.senderId === msg.senderId;
+                    const isNextSame = nextMsg && nextMsg.senderId === msg.senderId;
+
+                    // Time Grouping (e.g., if > 2 mins gap, don't group)
+                    const TIME_THRESHOLD = 2 * 60 * 1000;
+                    const isPrevClose = prevMsg && (msg.timestamp - prevMsg.timestamp < TIME_THRESHOLD);
+                    const isNextClose = nextMsg && (nextMsg.timestamp - msg.timestamp < TIME_THRESHOLD);
+                    
+                    const isFirstInGroup = !isPrevSame || !isPrevClose;
+                    const isLastInGroup = !isNextSame || !isNextClose;
+                    const isMiddleInGroup = !isFirstInGroup && !isLastInGroup;
+
+                    // Date Separation
+                    const showDate = isFirstInGroup && (!prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString());
+                    
+                    // Avatar logic: Show only on the last message of a group (for incoming)
+                    const showAvatar = !isMe && isLastInGroup;
+                    // Name logic: Show only on the first message of a group (for incoming group chats)
+                    const showSenderName = !isMe && isFirstInGroup && (isGroup || isChannel || isGlobalChat);
+
+                    return (
+                        <React.Fragment key={msg.id}>
+                            {showDate && renderDateBadge(msg.timestamp)}
+                            <MessageBubble
+                                message={msg}
+                                isMe={isMe}
+                                isFirstInGroup={isFirstInGroup}
+                                isLastInGroup={isLastInGroup}
+                                isMiddleInGroup={isMiddleInGroup}
+                                showAvatar={showAvatar}
+                                showSenderName={showSenderName || false}
+                                onReply={handleReplySwipe}
+                                onContextMenu={(e, m, i) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, message: m, isMe: i }); }}
+                                onMediaClick={(url, id) => setViewingImageId(id)}
+                                onPlayAudio={toggleAudio}
+                                isPlayingAudio={playingAudioId === msg.id}
+                                audioProgress={playingAudioId === msg.id ? audioProgress : 0}
+                                repliedMessage={msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null}
+                            />
+                        </React.Fragment>
+                    );
+                })}
+            </AnimatePresence>
+            <div ref={messagesEndRef} />
+        </div>
+
+        {/* Scroll To Bottom Button */}
+        {showScrollButton && (
+            <button 
+                onClick={scrollToBottom}
+                className="absolute bottom-20 right-4 z-40 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 p-3 rounded-full shadow-lg border border-gray-100 dark:border-gray-700 animate-fade-in hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+                <ArrowDown size={20} />
+            </button>
+        )}
+
+        {/* Input Area */}
+        <div className="p-2 sm:p-3 bg-white dark:bg-telegram-bgDark border-t border-gray-200 dark:border-white/5 relative z-20">
+            {isBlockedByMe ? (
+                <div className="w-full py-4 text-center text-gray-500 text-sm">شما این کاربر را مسدود کرده‌اید.</div>
+            ) : amIBlocked ? (
+                <div className="w-full py-4 text-center text-gray-500 text-sm">امکان ارسال پیام وجود ندارد.</div>
+            ) : !canWrite ? (
+                <div className="w-full py-3 flex items-center justify-center gap-2 text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5 select-none cursor-default">
+                     <Megaphone size={18} />
+                     <span className="text-sm">فقط مدیران می‌توانند در این کانال پیام ارسال کنند.</span>
+                </div>
+            ) : (
+                <div className="flex items-end gap-2 max-w-4xl mx-auto transition-all">
+                    {/* Slow Mode Overlay */}
+                    {slowModeCooldown > 0 && !editingMessage && (
+                        <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-800/90 rounded-xl flex items-center justify-center text-sm font-bold text-red-500">
+                            لطفاً {slowModeCooldown} ثانیه صبر کنید...
+                        </div>
+                    )}
+
+                    {/* Replying Banner */}
+                    {replyingTo && (
+                        <div className="absolute bottom-full left-0 right-0 bg-white dark:bg-gray-800 p-2 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center animate-slide-in shadow-sm z-10">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <Reply className="text-telegram-primary shrink-0" size={20} />
+                                <div className="border-l-2 border-telegram-primary pl-2 flex flex-col">
+                                    <span className="text-telegram-primary text-xs font-bold">پاسخ به {replyingTo.senderName || 'پیام'}</span>
+                                    <span className="text-xs text-gray-500 truncate max-w-[200px]">{replyingTo.text || 'رسانه'}</span>
+                                </div>
+                            </div>
+                            <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full"><X size={16} /></button>
+                        </div>
+                    )}
+
+                    {/* Recording UI */}
+                    {isRecording ? (
+                        <div className="flex-1 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-between px-4 py-3 shadow-md animate-fade-in border border-red-100 dark:border-red-900/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]"></div>
+                                <span className="font-mono text-red-500 font-bold">{formatDuration(recordingDuration)}</span>
+                            </div>
+                            
+                            {/* Video Preview Bubble */}
+                            {recordingMode === 'video' && (
+                                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-red-500 shadow-lg">
+                                    <video ref={videoPreviewRef} className="w-full h-full object-cover" muted />
+                                </div>
+                            )}
+
+                            <span className="text-sm text-gray-400">در حال ضبط {recordingMode === 'audio' ? 'صدا' : 'ویدیو'}...</span>
+                            <div className="flex items-center gap-3">
+                                <button onClick={cancelRecording} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={20} /></button>
+                                <button onClick={stopAndSendRecording} className="p-2 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-110 transition-transform"><Send size={18} className="rotate-180" /></button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <button className="p-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => genericFileInputRef.current?.click()}><Paperclip size={24} /></button>
+                            <div className="flex-1 bg-gray-100 dark:bg-black/20 rounded-2xl flex items-center relative transition-colors focus-within:bg-white dark:focus-within:bg-black/40 focus-within:ring-1 focus-within:ring-telegram-primary/30">
+                                <textarea
+                                    ref={inputRef}
+                                    value={inputValue}
+                                    onChange={handleInputChange}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }}}
+                                    placeholder="پیام..."
+                                    className="w-full bg-transparent border-none focus:ring-0 resize-none py-3 px-4 max-h-32 min-h-[48px] text-gray-900 dark:text-white placeholder-gray-400"
+                                    rows={1}
+                                />
+                                <button className="p-2 text-gray-400 hover:text-yellow-500 transition-colors" onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={24} /></button>
+                            </div>
+                            
+                            {/* Send or Mic/Video Toggle */}
+                            {inputValue.trim() ? (
+                                <button onClick={handleSend} className="p-3 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all"><Send size={24} className={inputValue ? "rotate-0" : "rotate-0"} /></button>
+                            ) : (
+                                <div className="relative group">
+                                    <button 
+                                        onMouseDown={startRecording}
+                                        onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                                        className="p-3 bg-telegram-primary/10 text-telegram-primary dark:text-white dark:bg-white/10 hover:bg-telegram-primary hover:text-white rounded-full shadow-none hover:shadow-lg transition-all active:scale-95"
+                                    >
+                                        {recordingMode === 'audio' ? <Mic size={24} /> : <Camera size={24} />}
+                                    </button>
+                                    
+                                    {/* Toggle Switch */}
+                                    {!isRecording && (
+                                        <button 
+                                            onClick={toggleRecordingMode}
+                                            className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-[10px]"
+                                            title="تغییر حالت ضبط"
+                                        >
+                                            {recordingMode === 'audio' ? <Video size={14}/> : <Mic size={14}/>}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+            
+            {/* Sticker/Emoji Picker Panel */}
+            {showEmojiPicker && (
+                <div className="absolute bottom-20 left-4 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-80 h-80 flex flex-col overflow-hidden animate-fade-in border dark:border-gray-700">
+                    <div className="flex border-b dark:border-gray-700">
+                        <button onClick={() => setPickerTab('emoji')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'emoji' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>ایموجی</button>
+                        <button onClick={() => setPickerTab('sticker')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'sticker' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>استیکر</button>
+                        <button onClick={() => setPickerTab('gif')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'gif' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>GIF</button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-3">
+                        {pickerTab === 'emoji' && (
+                            <div className="grid grid-cols-6 gap-2 content-start">
+                                {COMMON_EMOJIS.map(emoji => <button key={emoji} onClick={() => setInputValue(prev => prev + emoji)} className="text-2xl p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition-colors">{emoji}</button>)}
+                            </div>
+                        )}
+                        
+                        {pickerTab === 'sticker' && (
+                            <div className="grid grid-cols-3 gap-2">
+                                {STICKERS.map((s, i) => (
+                                    <div key={i} onClick={() => handleSendSticker(s, 'sticker')} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg p-1">
+                                        <img src={s} className="w-full h-auto object-contain" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        
+                        {pickerTab === 'gif' && (
+                             <div className="grid grid-cols-2 gap-2">
+                                {GIFS.map((g, i) => (
+                                    <div key={i} onClick={() => handleSendSticker(g, 'image')} className="cursor-pointer hover:opacity-80 rounded-lg overflow-hidden">
+                                        <img src={g} className="w-full h-24 object-cover" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+
+        {/* Custom Context Menu */}
+        {contextMenu && (
+            <>
+                <div className="fixed inset-0 z-[190]" onClick={() => setContextMenu(null)}></div>
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className="fixed z-[200] bg-white dark:bg-gray-800 rounded-xl shadow-2xl py-1 w-56 border dark:border-gray-700/50 backdrop-blur-xl" 
+                    style={{ top: Math.min(contextMenu.y, window.innerHeight - 300), left: Math.min(contextMenu.x, window.innerWidth - 224) }}
+                >
+                    {canWrite && <button onClick={() => { setReplyingTo(contextMenu.message); setContextMenu(null); inputRef.current?.focus(); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Reply size={18} /> پاسخ</button>}
+                    
+                    {onForwardMessage && (
+                        <button onClick={() => { onForwardMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Forward size={18} /> فوروارد</button>
+                    )}
+
+                    <button onClick={() => { navigator.clipboard.writeText(contextMenu.message.text); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Copy size={18} /> کپی متن</button>
+                    
+                    {canPin && (
+                        <button onClick={() => { onPinMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Pin size={18} /> سنجاق کردن</button>
+                    )}
+                    
+                    <div className="h-px bg-gray-100 dark:bg-gray-700 my-1"></div>
+
+                    {((contextMenu.isMe) || (isSystemAdmin) || (myPermissions?.canDeleteMessages)) && (
+                        <button onClick={() => { if(confirm('حذف شود؟')) onDeleteMessage(contextMenu.message.id); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm"><Trash2 size={18} /> حذف پیام</button>
+                    )}
+                </motion.div>
+            </>
+        )}
+    </div>
+  );
+};
+
+export default ChatWindow;
