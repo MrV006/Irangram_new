@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -34,7 +33,7 @@ interface ChatWindowProps {
 
 const COMMON_EMOJIS = ["😀", "😂", "🥰", "😎", "🤔", "😭", "👍", "👎", "❤️", "🔥", "👀", "✅", "💯", "🌹"];
 
-// Mock Stickers (Using public URLs)
+// Mock Stickers
 const STICKERS = [
     "https://cdn-icons-png.flaticon.com/512/9373/9373977.png",
     "https://cdn-icons-png.flaticon.com/512/9374/9374028.png",
@@ -977,77 +976,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     )}
                 </div>
             )}
-            
-            {/* Sticker/Emoji Picker Panel */}
-            {showEmojiPicker && (
-                <div className="absolute bottom-20 left-4 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-80 h-80 flex flex-col overflow-hidden animate-fade-in border dark:border-gray-700">
-                    <div className="flex border-b dark:border-gray-700">
-                        <button onClick={() => setPickerTab('emoji')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'emoji' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>ایموجی</button>
-                        <button onClick={() => setPickerTab('sticker')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'sticker' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>استیکر</button>
-                        <button onClick={() => setPickerTab('gif')} className={`flex-1 py-2 text-sm font-medium ${pickerTab === 'gif' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>GIF</button>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-3">
-                        {pickerTab === 'emoji' && (
-                            <div className="grid grid-cols-6 gap-2 content-start">
-                                {COMMON_EMOJIS.map(emoji => <button key={emoji} onClick={() => setInputValue(prev => prev + emoji)} className="text-2xl p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition-colors">{emoji}</button>)}
-                            </div>
-                        )}
-                        
-                        {pickerTab === 'sticker' && (
-                            <div className="grid grid-cols-3 gap-2">
-                                {STICKERS.map((s, i) => (
-                                    <div key={i} onClick={() => handleSendSticker(s, 'sticker')} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg p-1">
-                                        <img src={s} className="w-full h-auto object-contain" />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        
-                        {pickerTab === 'gif' && (
-                             <div className="grid grid-cols-2 gap-2">
-                                {GIFS.map((g, i) => (
-                                    <div key={i} onClick={() => handleSendSticker(g, 'image')} className="cursor-pointer hover:opacity-80 rounded-lg overflow-hidden">
-                                        <img src={g} className="w-full h-24 object-cover" />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
-
-        {/* Custom Context Menu */}
-        {contextMenu && (
-            <>
-                <div className="fixed inset-0 z-[190]" onClick={() => setContextMenu(null)}></div>
-                <motion.div 
-                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="fixed z-[200] bg-white dark:bg-gray-800 rounded-xl shadow-2xl py-1 w-56 border dark:border-gray-700/50 backdrop-blur-xl" 
-                    style={{ top: Math.min(contextMenu.y, window.innerHeight - 300), left: Math.min(contextMenu.x, window.innerWidth - 224) }}
-                >
-                    {canWrite && <button onClick={() => { setReplyingTo(contextMenu.message); setContextMenu(null); inputRef.current?.focus(); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Reply size={18} /> پاسخ</button>}
-                    
-                    {onForwardMessage && (
-                        <button onClick={() => { onForwardMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Forward size={18} /> فوروارد</button>
-                    )}
-
-                    <button onClick={() => { navigator.clipboard.writeText(contextMenu.message.text); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Copy size={18} /> کپی متن</button>
-                    
-                    {canPin && (
-                        <button onClick={() => { onPinMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200"><Pin size={18} /> سنجاق کردن</button>
-                    )}
-                    
-                    <div className="h-px bg-gray-100 dark:bg-gray-700 my-1"></div>
-
-                    {((contextMenu.isMe) || (isSystemAdmin) || (myPermissions?.canDeleteMessages)) && (
-                        <button onClick={() => { if(confirm('حذف شود؟')) onDeleteMessage(contextMenu.message.id); setContextMenu(null); }} className="w-full text-right px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm"><Trash2 size={18} /> حذف پیام</button>
-                    )}
-                </motion.div>
-            </>
-        )}
     </div>
   );
 };

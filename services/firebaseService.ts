@@ -1,3 +1,4 @@
+
 import { db, auth, storage } from "../firebaseConfig";
 import { 
   collection, 
@@ -901,12 +902,9 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
 
     const chatRef = doc(db, "chats", chatId);
     
-    // For groups/channels, participants are managed separately. For 1-on-1, ensure both are in.
-    // If it's a group (receiverId is a group ID), we don't update participants here usually, 
-    // unless it's a new DM.
-    
     // Check if chatId is a group or DM
-    const isGroup = chatId === receiverId && receiverId !== senderUid; 
+    // If it's a DM, add both users to participants
+    // If it's 'saved', only add sender
     
     const chatUpdateData: any = { 
         updatedAt: serverTimestamp(), 
@@ -914,11 +912,20 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
         lastSenderId: senderUid 
     };
 
-    // Only update participants for DMs to ensure the other person sees the chat
-    if (!isGroup && receiverId !== 'saved') {
-         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
-    } else if (receiverId === 'saved') {
+    // If it's saved messages
+    if (receiverId === 'saved') {
          chatUpdateData.participants = arrayUnion(senderUid);
+         chatUpdateData.type = 'user'; // Ensure type is user
+    } 
+    // If it's a direct message (not a group ID we know)
+    else {
+         // Logic: If receiverId matches an existing group ID, we don't add it as a participant.
+         // But here we assume receiverId is a User ID for DMs.
+         // The caller (App.tsx) handles Group IDs by passing the group ID as receiverId.
+         // Groups don't need 'participants' array update on every message usually, but DMs do to create the session.
+         
+         // We can safely add both IDs. Firestore arrayUnion ignores duplicates.
+         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
     }
 
     await setDoc(chatRef, chatUpdateData, { merge: true });
@@ -939,7 +946,7 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
 // ... [REST OF FILE REMAINS UNCHANGED] ...
 export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean = false) => { if (!db) return; const collectionPath = isGlobal ? "global_chat" : `chats/${chatId}/messages`; const msgRef = doc(db, collectionPath, messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const poll = data.poll as PollData; if (poll.isClosed) return; let newOptions = poll.options.map(opt => { const hasVotedThis = opt.voterIds.includes(userId); if (opt.id === optionId) { if (hasVotedThis) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; else return { ...opt, voterIds: [...opt.voterIds, userId] }; } else { if (!poll.allowMultiple && opt.voterIds.includes(userId)) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; } return opt; }); await updateDoc(msgRef, { "poll.options": newOptions }); } } catch(e) { console.error("Voting failed", e); } };
 export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => { if (!db) return; const msgRef = doc(db, "global_chat", messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const reactions = data.reactions || {}; const userList = reactions[emoji] || []; let newReactions = { ...reactions }; if (userList.includes(userId)) { newReactions[emoji] = userList.filter((id: string) => id !== userId); if (newReactions[emoji].length === 0) delete newReactions[emoji]; } else { newReactions[emoji] = [...userList, userId]; } await updateDoc(msgRef, { reactions: newReactions }); } } catch (e) {} };
-export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean }) => void) => { if (!db) return () => {}; const docRef = doc(db, "system", "info"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); callback({ currentVersion: data.currentVersion || CONFIG.VERSION, lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0, maintenanceMode: data.maintenanceMode || false }); } else { setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false }); } }); };
+export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean, globalScreenshotRestriction?: boolean }) => void) => { if (!db) return () => {}; const docRef = doc(db, "system", "info"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); callback({ currentVersion: data.currentVersion || CONFIG.VERSION, lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0, maintenanceMode: data.maintenanceMode || false, globalScreenshotRestriction: data.globalScreenshotRestriction || false }); } else { setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false }); } }); };
 export const checkAndTriggerCleanup = async () => { if (!db) return; };
 export const triggerSystemUpdate = async () => { if(!db) return; await setDoc(doc(db, "system", "info"), { forceUpdate: serverTimestamp() }, { merge: true }); };
 export const wipeSystemData = async () => { if(!db) return; await clearGlobalChat(); };
@@ -980,5 +987,7 @@ export const getAllUsers = async () => { if (!db) return []; try { const q = que
 export const updateUserRole = async (targetUid: string, newRole: UserRole) => { if (!db) return; await updateDoc(doc(db, "users", targetUid), { role: newRole }); };
 export const toggleUserBan = async (targetUid: string, currentBanStatus: boolean) => { if (!db) return; const docRef = doc(db, "users", targetUid); if (currentBanStatus) await updateDoc(docRef, { isBanned: false, banExpiresAt: null }); else await updateDoc(docRef, { isBanned: true }); };
 export const toggleUserMaintenance = async (targetUid: string, status: boolean) => { if(!db) return; await updateDoc(doc(db, "users", targetUid), { isUnderMaintenance: status }); };
+export const toggleUserScreenshotRestriction = async (targetUid: string, status: boolean) => { if(!db) return; await updateDoc(doc(db, "users", targetUid), { isScreenshotRestricted: status }); };
+export const setGlobalScreenshotRestriction = async (status: boolean) => { if(!db) return; await setDoc(doc(db, "system", "info"), { globalScreenshotRestriction: status }, { merge: true }); };
 export const suspendUser = async (targetUid: string, hours: number) => { if (!db) return; const expireTime = Date.now() + (hours * 60 * 60 * 1000); await updateDoc(doc(db, "users", targetUid), { isBanned: true, banExpiresAt: expireTime }); };
 export const checkAndLiftBan = async (uid: string, currentProfile: UserProfileData) => { if (!db || !currentProfile.isBanned || !currentProfile.banExpiresAt) return; if (currentProfile.role === 'owner' || currentProfile.role === 'developer') { await updateDoc(doc(db, "users", uid), { isBanned: false, banExpiresAt: null }); return; } if (Date.now() > currentProfile.banExpiresAt) { await updateDoc(doc(db, "users", uid), { isBanned: false, banExpiresAt: null }); } };

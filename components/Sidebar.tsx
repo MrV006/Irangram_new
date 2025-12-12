@@ -111,6 +111,17 @@ const Sidebar: React.FC<SidebarProps> = ({
       setIsMenuOpen(false);
   };
 
+  const handleClearCache = () => {
+      if (confirm("آیا از پاکسازی حافظه موقت مطمئن هستید؟ این کار باعث رفرش شدن برنامه می‌شود.")) {
+          // Clear only cache, keeping user session if possible or force reload
+          window.location.reload(); 
+      }
+  };
+
+  const handleManualUpdate = () => {
+      window.location.reload();
+  };
+
   const handleGroupImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
@@ -277,6 +288,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <button onClick={() => { onOpenSettings(); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
                         <Settings size={22} className="text-gray-500" /> <span className="font-medium">تنظیمات</span>
                     </button>
+                    
+                    {/* New Buttons */}
+                    <button onClick={handleClearCache} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
+                        <Eraser size={22} className="text-gray-500" /> <span className="font-medium">پاکسازی حافظه موقت</span>
+                    </button>
+                    <button onClick={handleManualUpdate} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
+                        <RefreshCw size={22} className="text-gray-500" /> <span className="font-medium">بروزرسانی وبسایت</span>
+                    </button>
+
                     <button onClick={handleInstallClick} className="w-full px-6 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
                         <Download size={22} className="text-gray-500" /> <span className="font-medium">نصب اپلیکیشن</span>
                     </button>

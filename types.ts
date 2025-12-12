@@ -77,7 +77,8 @@ export interface UserProfileData {
   avatar: string;
   role: UserRole;
   isBanned?: boolean;
-  isUnderMaintenance?: boolean; // New: Fake Maintenance Mode per user
+  isUnderMaintenance?: boolean; // Fake Maintenance Mode per user
+  isScreenshotRestricted?: boolean; // New: Prevent Screenshots/Copying
   banExpiresAt?: number; // Timestamp for temporary ban expiration
   expiresAt?: number; // For Guest Accounts (24h expiry)
   createdAt: any;
@@ -152,7 +153,8 @@ export interface SystemInfo {
   currentVersion: string;
   lastCleanup: number;
   forceUpdate?: number;
-  maintenanceMode?: boolean; // New: Global Maintenance Mode
+  maintenanceMode?: boolean; // Global Maintenance Mode
+  globalScreenshotRestriction?: boolean; // Global Screenshot Block
 }
 
 export interface SettingsDoc {

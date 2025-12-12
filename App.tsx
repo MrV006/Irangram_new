@@ -50,7 +50,6 @@ import {
     castPollVote,
     subscribeToWordFilters
 } from './services/firebaseService';
-import { getGeminiResponse } from './services/geminiService';
 import { 
     initializeWebRTC, 
     createCall, 
@@ -76,17 +75,6 @@ const INITIAL_CONTACTS: Contact[] = [
     phone: '',
     type: 'group',
     isGlobal: true,
-    isPinned: true
-  },
-  {
-    id: 'gemini_bot',
-    name: 'جمنای ✨',
-    avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
-    status: 'online',
-    bio: 'دستیار هوشمند شما (قدرت گرفته از Google Gemini)',
-    username: '@gemini_ai',
-    phone: '',
-    type: 'user',
     isPinned: true
   },
   {
@@ -198,6 +186,7 @@ const App: React.FC = () => {
   const [pendingUpdateTimestamp, setPendingUpdateTimestamp] = useState<number>(0);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [globalScreenshotRestriction, setGlobalScreenshotRestriction] = useState(false);
   
   // Call UI State (WebRTC)
   const [callState, setCallState] = useState<{
@@ -358,6 +347,16 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
+  // Apply Screenshot Restriction CSS
+  useEffect(() => {
+      const isRestricted = userProfile.isScreenshotRestricted || globalScreenshotRestriction;
+      if (isRestricted) {
+          document.body.classList.add('screenshot-protected');
+      } else {
+          document.body.classList.remove('screenshot-protected');
+      }
+  }, [userProfile.isScreenshotRestricted, globalScreenshotRestriction]);
+
   useEffect(() => {
     // Initial Load of Accounts
     const savedAccounts = localStorage.getItem('irangram_accounts');
@@ -406,6 +405,7 @@ const App: React.FC = () => {
                     role: role,
                     isBanned: (isOwner || isDeveloper) ? false : (realtimeProfile?.isBanned || false),
                     isUnderMaintenance: (isOwner || isDeveloper) ? false : (realtimeProfile?.isUnderMaintenance || false),
+                    isScreenshotRestricted: (isOwner || isDeveloper) ? false : (realtimeProfile?.isScreenshotRestricted || false),
                     banExpiresAt: realtimeProfile?.banExpiresAt,
                     avatar: realtimeProfile?.avatar || user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`,
                     createdAt: realtimeProfile?.createdAt,
@@ -553,12 +553,6 @@ const App: React.FC = () => {
 
       // 1-Second Interval Check (To ensure immediate updates for new contacts/messages even if listener lags)
       const checkInterval = setInterval(() => {
-          // In a real optimized app, we wouldn't poll Firestore this frequently.
-          // But since the user explicitly requested "check every 1 second whether they messaged before or not",
-          // The subscribeToUserChats above IS real-time (push).
-          // We use this interval to trigger heartbeat or lightweight check if needed.
-          // For now, we rely on the robust listener above which already handles "new chats from anyone".
-          // We can use this interval to update "Last Seen" UI or connectivity status.
           updateUserHeartbeat(currentUser.uid, 'online');
       }, 1000);
 
@@ -589,6 +583,7 @@ const App: React.FC = () => {
       return subscribeToSystemInfo((info) => {
           if (info.forceUpdate > 0) {
                const lastUpdate = parseInt(localStorage.getItem('last_forced_update') || '0');
+               // Only trigger if server timestamp is NEWER than local
                if (info.forceUpdate > lastUpdate) {
                    setPendingUpdateTimestamp(info.forceUpdate);
                    setForceUpdateMsg('بروزرسانی جدید در دسترس است.');
@@ -596,6 +591,7 @@ const App: React.FC = () => {
                }
           }
           setMaintenanceMode(info.maintenanceMode || false);
+          setGlobalScreenshotRestriction(info.globalScreenshotRestriction || false);
       });
   }, []);
 
@@ -618,7 +614,7 @@ const App: React.FC = () => {
              unsubscribePin();
           };
       } else {
-          // Private chat (Works for Saved, Gemini, and Users)
+          // Private chat (Works for Saved, and Users)
           if (unsubscribePrivateRef.current) unsubscribePrivateRef.current();
           const chatId = getChatId(currentUser.uid, activeContactId);
           unsubscribePrivateRef.current = subscribeToPrivateChat(chatId, (msgs) => {
@@ -948,49 +944,6 @@ const App: React.FC = () => {
         }
     }
 
-    if (activeContactId === 'gemini_bot') {
-         const chatId = getChatId(currentUser.uid, activeContactId);
-         
-         // 1. Send user message
-         try {
-             await sendPrivateMessage(chatId, activeContactId, {
-                text: content.text,
-                type: content.type,
-                imageUrl: finalImageUrl,
-                fileUrl: finalFileUrl,
-                fileName: content.fileName,
-                fileSize: content.fileSize,
-                audioDuration: content.audioDuration,
-                isSticker: content.isSticker,
-                replyToId,
-                senderId: currentUser.uid,
-                forwardedFrom: content.forwardedFrom
-            }, { name: userProfile.name, avatar: userProfile.avatar });
-
-            // 2. Trigger Gemini if text
-            if (content.type === 'text' && content.text) {
-                 const currentHistory = sessions[activeContactId]?.messages || [];
-                 
-                 try {
-                     const botResponse = await getGeminiResponse(activeContactId, content.text, currentHistory);
-                     
-                     // 3. Send Bot Response
-                     await sendPrivateMessage(chatId, activeContactId, {
-                        text: botResponse,
-                        type: 'text',
-                        senderId: 'gemini_bot'
-                     }, { name: 'جمنای ✨', avatar: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg' });
-                 } catch (e) {
-                     console.error("Gemini failed", e);
-                 }
-            }
-         } catch(e) {
-             console.error("Failed to send to Gemini", e);
-             alert("خطا در ارسال پیام به هوش مصنوعی.");
-         }
-        return;
-    }
-
     if (activeContactId === 'global_chat') {
         const avatarToSend = userProfile.name ? `https://ui-avatars.com/api/?name=${userProfile.name}&background=random&color=fff&size=64` : '';
         try {
@@ -1015,29 +968,26 @@ const App: React.FC = () => {
         return;
     }
 
-    const isReserved = activeContactId === 'global_chat';
-    if (!isReserved) {
-        const chatId = getChatId(currentUser.uid, activeContactId);
-        try {
-            await sendPrivateMessage(chatId, activeContactId, {
-                text: content.text,
-                type: content.type,
-                senderId: currentUser.uid,
-                imageUrl: finalImageUrl,
-                fileUrl: finalFileUrl,
-                fileName: content.fileName,
-                fileSize: content.fileSize,
-                audioDuration: content.audioDuration,
-                isSticker: content.isSticker,
-                replyToId,
-                forwardedFrom: content.forwardedFrom,
-                poll: content.poll
-            }, { name: userProfile.name, avatar: userProfile.avatar });
-        } catch(e) {
-            console.error("Private msg failed", e);
-            alert("خطا در ارسال پیام خصوصی.");
-        }
-        return;
+    // Handle standard chats and "Saved Messages"
+    const chatId = getChatId(currentUser.uid, activeContactId);
+    try {
+        await sendPrivateMessage(chatId, activeContactId, {
+            text: content.text,
+            type: content.type,
+            senderId: currentUser.uid,
+            imageUrl: finalImageUrl,
+            fileUrl: finalFileUrl,
+            fileName: content.fileName,
+            fileSize: content.fileSize,
+            audioDuration: content.audioDuration,
+            isSticker: content.isSticker,
+            replyToId,
+            forwardedFrom: content.forwardedFrom,
+            poll: content.poll
+        }, { name: userProfile.name, avatar: userProfile.avatar });
+    } catch(e) {
+        console.error("Private msg failed", e);
+        alert("خطا در ارسال پیام خصوصی.");
     }
   }, [activeContactId, currentUser, userProfile, contacts, sessions]);
 
@@ -1063,47 +1013,49 @@ const App: React.FC = () => {
       }
   };
 
-  // ... (Logout, Switch Account, Admin Chat, Avatar Click, Delete Chat, Block, Clear History, Typing, Update) - Keep existing logic
+  // --- LOGOUT & ACCOUNT SWITCHING FIX ---
   const handleLogout = async () => { setShowExitConfirm(true); };
   
   const handleConfirmLogout = async () => { 
       try {
           setShowExitConfirm(false); 
           setTargetEmail(''); 
+          localStorage.removeItem('irangram_proxy_user'); // Explicitly clear proxy session
           await logoutUser(currentUser?.uid); 
       } catch (e) {
           console.error("Logout failed", e);
       } finally {
           setCurrentUser(null);
-          // FORCE RELOAD TO CLEAR STATE
+          // Hard reload to clear all React state and memory
           window.location.href = window.location.origin;
       }
   }
   
   const handleAddAccount = async () => { 
       setTargetEmail(''); 
+      localStorage.removeItem('irangram_proxy_user');
       try {
           await logoutUser(currentUser?.uid); 
       } catch(e) {}
       setCurrentUser(null); 
-      window.location.reload(); // Force reload to show auth
+      window.location.href = window.location.origin;
   };
   
   const handleSwitchAccount = async (targetUid: string) => { 
       const account = storedAccounts.find(acc => acc.uid === targetUid); 
       if (account) {
-          // We save the email to local storage to pre-fill logic
+          // Pre-fill for UX, though auth flow handles actual switch
           localStorage.setItem('irangram_auth_retry_email', account.email);
           localStorage.setItem('irangram_auth_retry_name', account.name);
       }
       
+      localStorage.removeItem('irangram_proxy_user'); // Clear current session
       try {
           await logoutUser(currentUser?.uid); 
       } catch(e) {}
       
       setCurrentUser(null);
-      // Force reload will bring up AuthPage, which can check props or we can just let user click
-      window.location.reload(); 
+      window.location.href = window.location.origin; 
   };
   
   const handleStartChatFromAdmin = (targetUser: UserProfileData) => { const contact: Contact = { id: targetUser.uid, name: targetUser.name, avatar: targetUser.avatar, bio: targetUser.bio, username: '@' + targetUser.username, phone: targetUser.phone, status: 'offline', type: 'user' }; handleAddContact(contact); };
@@ -1112,7 +1064,13 @@ const App: React.FC = () => {
   const handleClearHistory = async () => { if (!activeContactId) return; if (!confirm("آیا از پاک کردن تاریخچه چت مطمئن هستید؟")) return; try { const chatId = getChatId(currentUser.uid, activeContactId === 'saved' ? 'saved' : activeContactId); await clearPrivateChatHistory(chatId); setSessions(prev => ({ ...prev, [activeContactId]: { ...prev[activeContactId], messages: [] } })); } catch (e) { console.error("Clear history failed", e); } };
   const handleBlockUser = async () => { if (!activeContactId) return; if (!confirm("آیا از مسدود کردن این کاربر مطمئن هستید؟")) return; try { await blockUser(currentUser.uid, activeContactId); alert("کاربر مسدود شد."); } catch (e) { console.error("Block user failed", e); } };
   const handleTyping = (isTyping: boolean) => { if (currentUser) setUserTyping(currentUser.uid, isTyping); };
-  const performUpdate = () => { if (pendingUpdateTimestamp > 0) localStorage.setItem('last_forced_update', pendingUpdateTimestamp.toString()); window.location.reload(); };
+  
+  const performUpdate = () => { 
+      if (pendingUpdateTimestamp > 0) {
+          localStorage.setItem('last_forced_update', pendingUpdateTimestamp.toString());
+      }
+      window.location.reload(); 
+  };
 
   if (authLoading) return <div className="h-[100dvh] w-full flex items-center justify-center bg-white dark:bg-black text-telegram-primary"><RefreshCw className="animate-spin w-10 h-10" /></div>;
   
@@ -1171,7 +1129,7 @@ const App: React.FC = () => {
           </div>
       )}
 
-      {/* FORCE UPDATE TOAST - Only for non-super admins */}
+      {/* FORCE UPDATE TOAST */}
       {updateAvailable && !isSuperAdmin && (
           <div onClick={performUpdate} className="fixed bottom-6 left-6 z-[100] bg-telegram-primary text-white p-4 rounded-2xl shadow-2xl shadow-blue-500/30 flex items-center gap-4 cursor-pointer hover:scale-105 transition-transform animate-slide-in">
               <div className="bg-white/20 p-2.5 rounded-full"><RefreshCw size={24} className="animate-spin" /></div>
