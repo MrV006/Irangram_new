@@ -42,6 +42,9 @@ import {
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
 import { CONFIG } from "../config";
 
+// Local Cache for critical data
+let localBannedWords: string[] = [];
+
 // Helper to remove undefined values
 const sanitizeData = (data: any) => {
     const clean: any = {};
@@ -633,11 +636,15 @@ export const sendGlobalMessage = async (message: Partial<Message>, userProfile: 
     if (!currentUser) throw new Error("کاربر احراز هویت نشده است.");
 
     let finalText = message.text || '';
+    
+    // Filter words using cached list to prevent blocking
     if (finalText && message.type === 'text') {
-        try {
-            const bannedWords = await getWordFilters();
-            bannedWords.forEach(word => { const regex = new RegExp(word, 'gi'); finalText = finalText.replace(regex, '*'.repeat(word.length)); });
-        } catch(e) { /* ignore offline */ }
+        if (localBannedWords.length > 0) {
+             localBannedWords.forEach(word => { 
+                 const regex = new RegExp(word, 'gi'); 
+                 finalText = finalText.replace(regex, '*'.repeat(word.length)); 
+             });
+        }
     }
     
     const safeMessage = sanitizeData({
@@ -827,17 +834,36 @@ export const triggerSystemUpdate = async () => { if(!db) return; await setDoc(do
 export const wipeSystemData = async () => { if(!db) return; await clearGlobalChat(); };
 export const setGlobalMaintenance = async (status: boolean) => { if(!db) return; await setDoc(doc(db, "system", "info"), { maintenanceMode: status }, { merge: true }); };
 export const deleteUserAccount = async (targetUid: string) => { if(!db) return; try { await deleteDoc(doc(db, "users", targetUid)); } catch(e) {} };
+
+export const subscribeToWordFilters = () => {
+    if (!db) return () => {};
+    const docRef = doc(db, "settings", "wordFilters");
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            localBannedWords = (docSnap.data() as any).bannedWords || [];
+        }
+    }, (error) => {
+       // Suppress error to avoid console noise if offline
+    });
+};
+
 export const getWordFilters = async (): Promise<string[]> => {
+    if (localBannedWords.length > 0) return localBannedWords;
     if (!db) return [];
     try {
         const docRef = doc(db, "settings", "wordFilters");
         const snap = await getDoc(docRef);
-        if (snap.exists()) return (snap.data() as any).bannedWords || [];
+        if (snap.exists()) {
+            const words = (snap.data() as any).bannedWords || [];
+            localBannedWords = words;
+            return words;
+        }
     } catch(e) {
         console.warn("Could not fetch word filters (offline)");
     }
     return [];
 };
+
 export const updateWordFilters = async (words: string[]) => {
     if (!db) return;
     await setDoc(doc(db, "settings", "wordFilters"), { bannedWords: words }, { merge: true });
