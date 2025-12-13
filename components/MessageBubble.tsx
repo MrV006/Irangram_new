@@ -125,8 +125,8 @@ const PollBubble: React.FC<{ message: Message; isMe: boolean }> = ({ message, is
     const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.voterIds?.length || 0), 0);
     
     return (
-        <div className="min-w-[280px] w-full">
-            <div className="font-bold text-sm mb-4 flex items-start gap-2 opacity-90 px-1">
+        <div className="min-w-[280px] w-full p-1">
+            <div className="font-bold text-sm mb-4 flex items-start gap-2 opacity-90">
                 <BarChart2 size={18} className="mt-0.5 shrink-0 text-telegram-primary" />
                 <span className="leading-tight">{poll.question}</span>
             </div>
@@ -134,36 +134,35 @@ const PollBubble: React.FC<{ message: Message; isMe: boolean }> = ({ message, is
                 {poll.options.map(opt => {
                     const votes = opt.voterIds?.length || 0;
                     const percent = totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100);
-                    const isSelected = opt.voterIds?.some(id => id === 'me'); // Simplified check, logic handled in parent
                     
                     return (
                         <div 
                             key={opt.id} 
-                            className="relative rounded-xl overflow-hidden cursor-pointer group isolate border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5"
-                            onClick={() => {
+                            className="relative rounded-xl overflow-hidden cursor-pointer group isolate border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 h-10 flex items-center"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Stop propagation to message bubble
                                 const event = new CustomEvent('poll-vote', { detail: { messageId: message.id, optionId: opt.id } });
                                 window.dispatchEvent(event);
                             }}
                         >
                             {/* Progress Bar Background */}
                             <div 
-                                className={`absolute inset-y-0 right-0 transition-all duration-700 ease-out z-0 ${isMe ? 'bg-green-200/50 dark:bg-green-500/20' : 'bg-blue-200/50 dark:bg-blue-500/20'}`} 
+                                className={`absolute inset-y-0 right-0 h-full transition-all duration-700 ease-out z-0 ${isMe ? 'bg-green-200/50 dark:bg-green-500/30' : 'bg-blue-200/50 dark:bg-blue-500/30'}`} 
                                 style={{ width: `${percent}%` }}
                             ></div>
                             
                             {/* Content */}
-                            <div className="relative p-3 flex justify-between items-center z-10 w-full">
-                                <span className="text-sm font-medium z-10 truncate ml-2">{opt.text}</span>
+                            <div className="relative px-3 flex justify-between items-center z-10 w-full pointer-events-none">
+                                <span className="text-sm font-bold z-10 truncate ml-2 text-gray-800 dark:text-gray-100">{opt.text}</span>
                                 <div className="flex items-center gap-2 shrink-0">
                                     <span className="text-xs font-bold opacity-70">{percent}%</span>
-                                    {/* Optional: Add checkmark if voted */}
                                 </div>
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex justify-between items-center text-[11px] opacity-60 font-medium px-1">
+            <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex justify-between items-center text-[11px] opacity-60 font-medium">
                 <span>{totalVotes.toLocaleString('fa-IR')} رای</span>
                 <span>{poll.allowMultiple ? 'چند انتخابی' : 'تک انتخابی'}</span>
             </div>
@@ -210,7 +209,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     const handleDragEnd = async (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         setIsDragging(false);
         if (isSelectionMode) return;
-        if (info.offset.x < -50) {
+        
+        // Trigger reply on left OR right swipe (threshold > 50px)
+        if (Math.abs(info.offset.x) > 50) {
             onReply(message);
         }
         await controls.start({ x: 0 });
@@ -277,7 +278,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
              <motion.div
                 drag={isSelectionMode ? false : "x"}
-                dragConstraints={{ left: -80, right: 0 }}
+                // Allow dragging both left and right
+                dragConstraints={{ left: -80, right: 80 }}
                 dragElastic={0.1}
                 onDragStart={() => setIsDragging(true)}
                 onDragEnd={handleDragEnd}
