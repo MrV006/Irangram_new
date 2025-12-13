@@ -1,4 +1,5 @@
 
+
 import { db, auth, storage } from "../firebaseConfig";
 import { 
   collection, 
@@ -34,7 +35,7 @@ import {
   type User
 } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
-import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
+import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions, ChatFolder } from "../types";
 import { CONFIG } from "../config";
 
 // Local Cache for critical data
@@ -219,7 +220,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
+            return { uid: docSnap.id, ...doc.data() } as UserProfileData;
         } else {
             // Check if current user info is available (for system accounts)
             if (auth?.currentUser?.uid === uid) {
@@ -250,6 +251,23 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         console.error("Error fetching profile", e);
     }
     return null;
+};
+
+// --- CHAT FOLDERS ---
+export const saveChatFolders = async (uid: string, folders: ChatFolder[]) => {
+    if (!db) return;
+    await setDoc(doc(db, "users", uid, "settings", "folders"), { folders });
+};
+
+export const subscribeToChatFolders = (uid: string, callback: (folders: ChatFolder[]) => void) => {
+    if (!db) return () => {};
+    return onSnapshot(doc(db, "users", uid, "settings", "folders"), (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data().folders || []);
+        } else {
+            callback([]);
+        }
+    }, (e) => console.warn("Folder listener error", e));
 };
 
 // --- CHAT PREFERENCES (PIN/ARCHIVE) ---
@@ -365,7 +383,8 @@ export const createGroup = async (name: string, description: string, imageFile: 
         creatorId,
         admins: [creatorId],
         adminPermissions: { [creatorId]: { canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: true } },
-        slowMode: 0
+        slowMode: 0,
+        pinnedMessages: [] // Initialize empty array
     });
 
     return { id: groupRef.id, name, avatar: avatarUrl, type: type };
@@ -571,34 +590,59 @@ export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgr
 export const setChatPin = async (chatId: string, message: { id: string, text: string, sender: string, type: string }) => {
     if (!db) return;
     if (chatId === 'global_chat') {
-        await setDoc(doc(db, "chat_metadata", chatId), { pinnedMessage: message, updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, "chat_metadata", chatId), { pinnedMessages: arrayUnion(message), updatedAt: serverTimestamp() }, { merge: true });
     } else {
-        await updateDoc(doc(db, "chats", chatId), { pinnedMessage: message });
+        await updateDoc(doc(db, "chats", chatId), { pinnedMessages: arrayUnion(message) });
     }
 };
 
-export const removeChatPin = async (chatId: string) => {
+export const removeChatPin = async (chatId: string, messageId?: string) => {
     if (!db) return;
-    if (chatId === 'global_chat') {
-        await updateDoc(doc(db, "chat_metadata", chatId), { pinnedMessage: null });
-    } else {
-        await updateDoc(doc(db, "chats", chatId), { pinnedMessage: null });
+    const docRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
+    
+    // We need to read the doc to find the exact object to remove if we only have ID, 
+    // but typically arrayRemove needs equality. 
+    // To simplify, we will read the current pins, filter out the target, and update.
+    try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+            const data = snap.data();
+            const currentPins = data.pinnedMessages || [];
+            // If messageId is provided, remove only that one. If not, remove all (legacy behavior) or last one.
+            // Let's remove specific ID.
+            if (messageId) {
+                const updatedPins = currentPins.filter((p: any) => p.id !== messageId);
+                await updateDoc(docRef, { pinnedMessages: updatedPins });
+            } else {
+                // Fallback: Clear all if no ID passed (or maybe just pop last?)
+                // Let's clear all for safety if no ID, but UI should pass ID.
+                await updateDoc(docRef, { pinnedMessages: [] });
+            }
+        }
+    } catch(e) {
+        console.error("Remove pin failed", e);
     }
 };
 
-export const subscribeToChatPin = (chatId: string, callback: (data: any) => void) => {
+export const subscribeToChatPin = (chatId: string, callback: (data: any[]) => void) => {
     if (!db) return () => {};
-    if (chatId === 'global_chat') {
-        return onSnapshot(doc(db, "chat_metadata", chatId), (docSnap) => {
-            if (docSnap.exists()) callback(docSnap.data().pinnedMessage);
-            else callback(null);
-        }, (error) => console.warn("Pin Listener Error:", error));
-    } else {
-        return onSnapshot(doc(db, "chats", chatId), (docSnap) => {
-             if (docSnap.exists()) callback(docSnap.data().pinnedMessage);
-             else callback(null);
-        }, (error) => console.warn("Pin Listener Error:", error));
-    }
+    const docRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
+    
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            // Handle both legacy 'pinnedMessage' and new 'pinnedMessages'
+            if (data.pinnedMessages && Array.isArray(data.pinnedMessages)) {
+                callback(data.pinnedMessages);
+            } else if (data.pinnedMessage) {
+                callback([data.pinnedMessage]);
+            } else {
+                callback([]);
+            }
+        } else {
+            callback([]);
+        }
+    }, (error) => console.warn("Pin Listener Error:", error));
 };
 
 export const getChatId = (uid1: string, uid2: string) => {
@@ -687,7 +731,7 @@ export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => vo
                 id: doc.id, 
                 ...data, 
                 updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toMillis() : Date.now(),
-                pinnedMessage: data.pinnedMessage || null
+                pinnedMessages: data.pinnedMessages || (data.pinnedMessage ? [data.pinnedMessage] : [])
             };
         });
         // Sort in client side to handle potential timestamp issues

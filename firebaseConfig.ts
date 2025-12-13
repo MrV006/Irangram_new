@@ -1,7 +1,7 @@
 
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getAnalytics } from "firebase/analytics";
@@ -31,16 +31,25 @@ try {
     app = initializeApp(firebaseConfig);
     
     // Direct Firestore Connection with Long Polling enforced for better connectivity in restricted networks
+    // Also enables Offline Persistence via persistentLocalCache (New SDK API)
     try {
         db = initializeFirestore(app, {
             localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
             experimentalForceLongPolling: true, // Critical fix for Iran/Restrictive Networks
             ignoreUndefinedProperties: true
         });
-        console.log("Firestore initialized (Long Polling Mode)");
+        console.log("Firestore initialized (Long Polling & Offline Mode)");
     } catch (e) {
         console.warn("Firestore init failed, falling back to default", e);
         db = getFirestore(app);
+        // Attempt to enable persistence in fallback mode (Legacy API)
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code == 'failed-precondition') {
+                console.warn('Persistence failed: Multiple tabs open');
+            } else if (err.code == 'unimplemented') {
+                console.warn('Persistence not supported by browser');
+            }
+        });
     }
 
     auth = getAuth(app);

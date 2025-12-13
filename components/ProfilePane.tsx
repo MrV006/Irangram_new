@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Phone, AtSign, Bell, Image as ImageIcon, Video, FileText, Link as LinkIcon, MessageSquare, Globe, Users, Ban, Unlock, LogOut, Trash2, UserPlus, CheckCircle, Shield, Copy, UserMinus, Crown, Settings, Clock, CheckSquare } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Contact, UserProfileData, AdminPermissions } from '../types';
 import { checkBlockedStatus, blockUser, unblockUser, getGroupMembers, isGroupAdmin, removeGroupMember, addGroupMember, leaveGroup, searchUser, getGroupInviteLink, promoteToGroupAdmin, demoteGroupAdmin, updateChatSlowMode, updateGroupAdminPermissions, getGroupDetails } from '../services/firebaseService';
 
@@ -142,7 +143,6 @@ const ProfilePane: React.FC<ProfilePaneProps> = ({ contact, onClose, onStartChat
   };
 
   const openPermsModal = (adminId: string) => {
-      // In a real app, we would fetch existing perms. For now, reset to default.
       setEditingAdminId(adminId);
       setShowPermsModal(true);
   };
@@ -157,7 +157,13 @@ const ProfilePane: React.FC<ProfilePaneProps> = ({ contact, onClose, onStartChat
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-telegram-secondaryDark border-l border-gray-200 dark:border-telegram-borderDark overflow-y-auto animate-slide-in relative">
+    <motion.div 
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="h-full flex flex-col bg-white dark:bg-telegram-secondaryDark border-l border-gray-200 dark:border-telegram-borderDark overflow-y-auto relative"
+    >
       
       {/* Permission Modal */}
       {showPermsModal && (
@@ -392,7 +398,7 @@ const ProfilePane: React.FC<ProfilePaneProps> = ({ contact, onClose, onStartChat
             ))}
          </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

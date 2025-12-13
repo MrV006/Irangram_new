@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
@@ -59,10 +60,11 @@ import {
     subscribeToIncomingCalls 
 } from './services/webrtcService';
 import { RefreshCw, Download, LogOut, Phone, Mic, MicOff, PhoneOff, Bell, AlertTriangle, Construction, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CONFIG } from './config';
 
 // Short Pop Sound (Base64)
-const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 const RING_SOUND = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg";
 
 const INITIAL_CONTACTS: Contact[] = [
@@ -97,7 +99,8 @@ INITIAL_CONTACTS.forEach(c => {
     contactId: c.id,
     messages: [],
     unreadCount: 0,
-    draft: ''
+    draft: '',
+    pinnedMessages: []
   };
 });
 
@@ -170,9 +173,12 @@ const App: React.FC = () => {
   const [storedAccounts, setStoredAccounts] = useState<StoredAccount[]>([]);
   const [targetEmail, setTargetEmail] = useState<string>(''); 
   
-  const [wallpaper, setWallpaper] = useState<string>('default');
+  const [wallpaper, setWallpaper] = useState<string>(() => localStorage.getItem('irangram_wallpaper') || 'default');
+  const [accentColor, setAccentColor] = useState<string>(() => localStorage.getItem('irangram_accent_color') || '#3390ec');
 
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
+  const [highlightMessageId, setHighlightMessageId] = useState<string | undefined>(undefined); // Added for Global Search Jump
+
   const [theme, setTheme] = useState<Theme>(() => {
      return (localStorage.getItem('irangram_theme') as Theme) || Theme.LIGHT;
   });
@@ -244,6 +250,14 @@ const App: React.FC = () => {
       showExitConfirm,
       callState
   });
+
+  // Apply Accent Color
+  useEffect(() => {
+    document.documentElement.style.setProperty('--tg-primary', accentColor);
+    // Simple dark variation logic, can be more sophisticated
+    // For now, let's keep it close or same for simplicity as Telegram mostly shifts background
+    document.documentElement.style.setProperty('--tg-primary-dark', accentColor); 
+  }, [accentColor]);
 
   useEffect(() => {
       contactsRef.current = contacts;
@@ -351,8 +365,6 @@ const App: React.FC = () => {
 
   // Apply Screenshot Restriction CSS
   useEffect(() => {
-      // Logic: Only restrict if user-specific restriction OR global restriction is TRUE.
-      // If both false (default), screenshot-protected class is removed.
       const isRestricted = userProfile.isScreenshotRestricted || globalScreenshotRestriction;
       if (isRestricted) {
           document.body.classList.add('screenshot-protected');
@@ -362,7 +374,6 @@ const App: React.FC = () => {
   }, [userProfile.isScreenshotRestricted, globalScreenshotRestriction]);
 
   useEffect(() => {
-    // Initial Load of Accounts
     const savedAccounts = localStorage.getItem('irangram_accounts');
     if (savedAccounts) {
         try {
@@ -377,11 +388,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsub = subscribeToAuth(async (user) => {
         if (user) {
-            // OPTIMIZATION: Set current user immediately to unblock UI
             setCurrentUser(user);
-            setAuthLoading(false); // Enable UI interaction immediately
+            setAuthLoading(false);
 
-            // Fetch profile in background
             getUserProfile(user.uid).then((profile) => {
                 if(profile?.role === 'guest' && profile?.expiresAt) {
                     if (Date.now() > profile.expiresAt) {
@@ -393,7 +402,6 @@ const App: React.FC = () => {
                 }
             });
 
-            // Subscribe to profile changes
             subscribeToUserProfile(user.uid, (realtimeProfile) => {
                 const isOwner = user.email === CONFIG.OWNER_EMAIL;
                 const isDeveloper = user.email === CONFIG.DEVELOPER_EMAIL || user.email === 'developer.irangram@gmail.com';
@@ -418,7 +426,6 @@ const App: React.FC = () => {
                 });
             });
 
-            // Listen for incoming calls
             const callUnsub = subscribeToIncomingCalls(user.uid, (callData) => {
                 if (!stateRef.current.callState.isActive) { 
                     setCallState({
@@ -433,17 +440,14 @@ const App: React.FC = () => {
                         isVideo: callData.isVideo
                     });
                     
-                    // Play Ringtone
                     ringtoneRef.current = new Audio(RING_SOUND);
                     ringtoneRef.current.loop = true;
                     ringtoneRef.current.play().catch(e => console.error("Ringtone play error", e));
                 }
             });
             
-            // Listen for call ended event from service
             window.addEventListener('callEnded', handleRemoteHangup);
 
-            // Subscribe to Chat Preferences (Pin/Archive)
             const prefUnsub = subscribeToChatPreferences(user.uid, (prefs) => {
                 setContacts(prev => prev.map(c => {
                     if (prefs[c.id]) {
@@ -463,11 +467,10 @@ const App: React.FC = () => {
             setCurrentUser(null);
             setContacts(INITIAL_CONTACTS);
             setSessions(INITIAL_SESSIONS);
-            setAuthLoading(false); // Ensure loading stops
+            setAuthLoading(false);
         }
     });
 
-    // Safety timeout in case auth takes too long
     const safetyTimeout = setTimeout(() => {
         if(authLoading) setAuthLoading(false);
     }, 5000);
@@ -478,20 +481,13 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // --- Real-Time Chat Discovery & 1-Second Polling Logic ---
   useEffect(() => {
       if(!currentUser) return;
 
-      // START WORD FILTER SUBSCRIPTION HERE
       const unsubFilters = subscribeToWordFilters();
 
-      // This is the listener for real-time chat updates (new messages, new chats)
       const unsubUserChats = subscribeToUserChats(currentUser.uid, async (userChats) => {
-           // We map userChats to sessions/contacts logic
-           
-           // Process each chat to ensure we have the contact info
            for (const chat of userChats) {
-                // If this is a group/channel
                 if (chat.type === 'group' || chat.type === 'channel') {
                     setContacts(prev => {
                         if (prev.some(c => c.id === chat.id)) return prev;
@@ -504,19 +500,15 @@ const App: React.FC = () => {
                             status: 'online',
                             username: '',
                             phone: '',
-                            isPinned: chat.isPinned, // From DB if saved there
+                            isPinned: chat.isPinned,
                             creatorId: chat.creatorId
                         }];
                     });
                 } else {
-                    // It's a private chat
-                    // Find the other participant ID
                     const otherId = chat.participants.find((p: string) => p !== currentUser.uid);
                     
                     if (otherId && otherId !== 'saved') {
-                        // Check if we already have this contact
                         if (!contactsRef.current.some(c => c.id === otherId)) {
-                            // If we don't have it, and we aren't already fetching it
                             if (!fetchingContactIds.current.has(otherId)) {
                                 fetchingContactIds.current.add(otherId);
                                 try {
@@ -541,22 +533,19 @@ const App: React.FC = () => {
                     }
                 }
 
-                // Update Session Data (Unread, Last Message)
-                // Note: For saved messages, id logic is handled such that it updates 'saved' session
                 setSessions(prev => ({
                     ...prev,
                     [chat.type === 'user' ? (chat.participants.find((p:string) => p !== currentUser.uid) || 'saved') : chat.id]: {
                         contactId: chat.id,
-                        messages: prev[chat.id]?.messages || [], // Messages loaded separately
-                        unreadCount: 0, // Simplified for now
+                        messages: prev[chat.id]?.messages || [],
+                        unreadCount: 0,
                         draft: prev[chat.id]?.draft || '',
-                        pinnedMessage: chat.pinnedMessage
+                        pinnedMessages: chat.pinnedMessages || []
                     }
                 }));
            }
       });
 
-      // 1-Second Interval Check (To ensure immediate updates for new contacts/messages even if listener lags)
       const checkInterval = setInterval(() => {
           updateUserHeartbeat(currentUser.uid, 'online');
       }, 1000);
@@ -569,7 +558,6 @@ const App: React.FC = () => {
   }, [currentUser]);
   
   useEffect(() => {
-      // Notifications logic
       if(currentUser) {
           return subscribeToNotifications(currentUser.uid, (notifs) => {
              if(notifs.length > 0) {
@@ -584,11 +572,9 @@ const App: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
-      // System info logic
       return subscribeToSystemInfo((info) => {
           if (info.forceUpdate > 0) {
                const lastUpdate = parseInt(localStorage.getItem('last_forced_update') || '0');
-               // Only trigger if server timestamp is NEWER than local
                if (info.forceUpdate > lastUpdate) {
                    setPendingUpdateTimestamp(info.forceUpdate);
                    setForceUpdateMsg('بروزرسانی جدید در دسترس است.');
@@ -601,12 +587,11 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-      // Chat subscriptions
       if (!activeContactId || !currentUser) return;
 
       const unsubscribePin = subscribeToChatPin(
           activeContactId === 'global_chat' ? 'global_chat' : getChatId(currentUser.uid, activeContactId),
-          (pinned) => setSessions(prev => ({ ...prev, [activeContactId]: { ...prev[activeContactId], pinnedMessage: pinned } }))
+          (pinnedData) => setSessions(prev => ({ ...prev, [activeContactId]: { ...prev[activeContactId], pinnedMessages: pinnedData } }))
       );
 
       if (activeContactId === 'global_chat') {
@@ -619,7 +604,6 @@ const App: React.FC = () => {
              unsubscribePin();
           };
       } else {
-          // Private chat (Works for Saved, and Users)
           if (unsubscribePrivateRef.current) unsubscribePrivateRef.current();
           const chatId = getChatId(currentUser.uid, activeContactId);
           unsubscribePrivateRef.current = subscribeToPrivateChat(chatId, (msgs) => {
@@ -632,15 +616,12 @@ const App: React.FC = () => {
       }
   }, [activeContactId, currentUser]);
 
-  // --- WebRTC Call Handlers ---
-
   const handleStartCall = async (isVideo: boolean) => {
       if (!activeContactId || !currentUser) return;
       const targetContact = contacts.find(c => c.id === activeContactId);
       if (!targetContact) return;
 
       try {
-          // 1. Initialize Local Stream
           const { localStream, remoteStream } = await initializeWebRTC(isVideo);
           
           setCallState({
@@ -655,7 +636,6 @@ const App: React.FC = () => {
               isVideo
           });
 
-          // 2. Create Call in Firestore
           const { callId, unsubscribe } = await createCall(
               currentUser.uid, 
               activeContactId, 
@@ -678,8 +658,6 @@ const App: React.FC = () => {
 
   const handleAcceptCall = async () => {
       if (!callState.callId) return;
-      
-      // Stop Ringtone
       if (ringtoneRef.current) {
           ringtoneRef.current.pause();
           ringtoneRef.current = null;
@@ -687,13 +665,12 @@ const App: React.FC = () => {
 
       try {
           const { localStream, remoteStream } = await initializeWebRTC(callState.isVideo);
-          
           setCallState(prev => ({
               ...prev,
               localStream,
               remoteStream,
               status: 'connected',
-              isIncoming: false // UI switches to active call view
+              isIncoming: false
           }));
 
           const unsubscribe = await answerCall(callState.callId);
@@ -709,7 +686,6 @@ const App: React.FC = () => {
       if (callState.callId) {
           await endCall(callState.callId);
       }
-      
       resetCallState();
   };
 
@@ -727,8 +703,6 @@ const App: React.FC = () => {
           callUnsubscribeRef.current();
           callUnsubscribeRef.current = null;
       }
-      // Reload window to fully clear WebRTC tracks if needed, or just reset state
-      // Simple reset for SPA
       setCallState({
           isActive: false,
           isIncoming: false,
@@ -740,18 +714,14 @@ const App: React.FC = () => {
           status: 'idle',
           isVideo: false
       });
-      
-      // Also ensure service cleans up
       endCall(''); 
   };
 
-  // --- Folder & Organization Handlers ---
   const handleTogglePinChat = async (contactId: string) => {
       if (!currentUser) return;
       const contact = contacts.find(c => c.id === contactId);
       if (contact) {
           const newStatus = !contact.isPinned;
-          // Optimistic update
           setContacts(prev => prev.map(c => c.id === contactId ? { ...c, isPinned: newStatus } : c));
           await updateUserChatPreference(currentUser.uid, contactId, { isPinned: newStatus });
       }
@@ -768,11 +738,11 @@ const App: React.FC = () => {
       }
   };
 
-  // ... (Existing handlers: toggleTheme, handleSelectContact, etc.)
   const toggleTheme = () => setTheme(prev => prev === Theme.LIGHT ? Theme.DARK : Theme.LIGHT);
 
-  const handleSelectContact = (id: string) => {
+  const handleSelectContact = (id: string, jumpToMessageId?: string) => {
     setActiveContactId(id);
+    setHighlightMessageId(jumpToMessageId);
     setShowProfile(false);
     setViewingContact(null);
     setSessions(prev => ({
@@ -795,7 +765,8 @@ const App: React.FC = () => {
                   contactId: newContact.id,
                   messages: [],
                   unreadCount: 0,
-                  draft: ''
+                  draft: '',
+                  pinnedMessages: []
               }
           };
       });
@@ -827,14 +798,10 @@ const App: React.FC = () => {
       }
   };
 
-
-  // ... (Other handlers: Reaction, Delete, Pin, Edit, etc. - Keep them as is)
   const handleReaction = useCallback(async (messageId: string, emoji: string) => {
       if (!activeContactId || !currentUser) return;
       if (activeContactId === 'global_chat') {
           await toggleMessageReaction(messageId, emoji, currentUser.uid);
-      } else {
-          // Local reaction logic for demo if needed, otherwise rely on firebase
       }
   }, [activeContactId, currentUser]);
 
@@ -843,7 +810,6 @@ const App: React.FC = () => {
       if (activeContactId === 'global_chat') {
           await deleteMessageGlobal(messageId);
       } else {
-          // Local delete for private chat demo
           const chatId = getChatId(currentUser.uid, activeContactId);
           await deletePrivateMessage(chatId, messageId);
       }
@@ -861,10 +827,10 @@ const App: React.FC = () => {
       await setChatPin(chatId, pinPayload);
   }, [activeContactId, currentUser]);
 
-  const handleUnpinMessage = useCallback(async () => {
+  const handleUnpinMessage = useCallback(async (messageId?: string) => {
       if (!activeContactId) return;
       const chatId = activeContactId === 'global_chat' ? 'global_chat' : getChatId(currentUser.uid, activeContactId);
-      await removeChatPin(chatId);
+      await removeChatPin(chatId, messageId);
   }, [activeContactId, currentUser]);
 
   const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
@@ -951,14 +917,12 @@ const App: React.FC = () => {
       return <MaintenancePage onLogout={() => logoutUser(currentUser.uid)} />;
   }
 
-  // Active Chat Logic
   const activeSession = activeContactId ? sessions[activeContactId] : null;
   const activeContact = activeContactId ? contacts.find(c => c.id === activeContactId) : null;
   const activeMessages = activeSession ? activeSession.messages : [];
 
   return (
     <div className={`flex h-full overflow-hidden ${theme}`}>
-       {/* Call UI Overlay */}
        {callState.isActive && (
            <CallModal 
                localStream={callState.localStream}
@@ -973,7 +937,6 @@ const App: React.FC = () => {
            />
        )}
 
-       {/* System Notifications */}
        {systemAlert && (
            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-black/80 text-white px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl animate-fade-in-down">
                <Bell className="text-yellow-400" />
@@ -985,7 +948,6 @@ const App: React.FC = () => {
            </div>
        )}
        
-       {/* Update Available Banner */}
        {updateAvailable && (
            <div className="fixed bottom-4 right-4 z-[100] bg-telegram-primary text-white p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-slide-in">
                <Download size={24} />
@@ -997,7 +959,7 @@ const App: React.FC = () => {
            </div>
        )}
 
-       {/* Sidebar */}
+       {/* Sidebar - Remains visible on desktop, hidden on mobile if chat active */}
        <div className={`${activeContactId && isMobile ? 'hidden' : 'w-full md:w-80 lg:w-96'} h-full shrink-0 z-10`}>
           <Sidebar 
               contacts={contacts} 
@@ -1028,79 +990,101 @@ const App: React.FC = () => {
           />
        </div>
 
-       {/* Main Chat Area */}
-       <div className={`flex-1 h-full relative ${!activeContactId && isMobile ? 'hidden' : 'block'}`}>
+       {/* Main Chat Area - Animated Switch on Mobile */}
+       <div className={`flex-1 h-full relative ${isMobile ? 'absolute inset-0 z-20 pointer-events-none' : ''}`}>
+           <AnimatePresence>
            {activeContactId && activeContact ? (
-               <ChatWindow 
-                   contact={activeContact}
-                   messages={activeMessages}
-                   myId={currentUser.uid}
-                   myRole={userProfile.role}
-                   pinnedMessage={sessions[activeContactId]?.pinnedMessage}
-                   onSendMessage={(content, replyToId) => {
-                       if (activeContactId === 'global_chat') {
-                           sendGlobalMessage(content, userProfile);
-                       } else {
-                           const chatId = activeContact.type === 'user' ? getChatId(currentUser.uid, activeContact.id) : activeContact.id;
-                           sendPrivateMessage(chatId, activeContact.id, content, userProfile);
-                       }
-                   }}
-                   onEditMessage={handleEditMessage}
-                   onDeleteMessage={handleDeleteMessage}
-                   onPinMessage={handlePinMessage}
-                   onUnpinMessage={handleUnpinMessage}
-                   onReaction={handleReaction}
-                   onBack={() => setActiveContactId(null)}
-                   isMobile={isMobile}
-                   onProfileClick={() => setShowProfile(true)}
-                   wallpaper={wallpaper}
-                   onCall={handleStartCall}
-                   onClearHistory={() => {
-                       if(confirm("آیا از پاک کردن تاریخچه مطمئن هستید؟")) {
-                           if (activeContactId === 'global_chat') clearGlobalChat(); // usually restricted
-                           else {
-                               const chatId = getChatId(currentUser.uid, activeContactId);
-                               clearPrivateChatHistory(chatId);
+               <motion.div 
+                   key="chat-window"
+                   initial={isMobile ? { x: '100%' } : { opacity: 0 }}
+                   animate={isMobile ? { x: 0 } : { opacity: 1 }}
+                   exit={isMobile ? { x: '100%' } : { opacity: 0 }}
+                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                   className={`absolute inset-0 bg-white dark:bg-telegram-bgDark pointer-events-auto shadow-2xl md:shadow-none`}
+               >
+                   <ChatWindow 
+                       contact={activeContact}
+                       messages={activeMessages}
+                       myId={currentUser.uid}
+                       myRole={userProfile.role}
+                       pinnedMessages={sessions[activeContactId]?.pinnedMessages}
+                       onSendMessage={(content, replyToId) => {
+                           if (activeContactId === 'global_chat') {
+                               sendGlobalMessage(content, userProfile);
+                           } else {
+                               const chatId = activeContact.type === 'user' ? getChatId(currentUser.uid, activeContact.id) : activeContact.id;
+                               sendPrivateMessage(chatId, activeContact.id, content, userProfile);
                            }
-                       }
-                   }}
-                   onDeleteChat={() => {
-                       if(confirm("آیا از حذف این گفتگو مطمئن هستید؟")) {
-                           deleteChat(activeContact.type === 'user' ? getChatId(currentUser.uid, activeContact.id) : activeContact.id);
-                           setActiveContactId(null);
-                       }
-                   }}
-                   onBlockUser={() => {
-                       if (activeContact.type === 'user') {
-                           blockUser(currentUser.uid, activeContact.id).then(() => alert("کاربر مسدود شد."));
-                       }
-                   }}
-                   onTyping={(isTyping) => setUserTyping(currentUser.uid, isTyping)}
-                   onForwardMessage={handleOpenForward}
-               />
+                       }}
+                       onEditMessage={handleEditMessage}
+                       onDeleteMessage={handleDeleteMessage}
+                       onPinMessage={handlePinMessage}
+                       onUnpinMessage={handleUnpinMessage}
+                       onReaction={handleReaction}
+                       onBack={() => setActiveContactId(null)}
+                       isMobile={isMobile}
+                       onProfileClick={() => setShowProfile(true)}
+                       wallpaper={wallpaper}
+                       onCall={handleStartCall}
+                       onClearHistory={() => {
+                           if(confirm("آیا از پاک کردن تاریخچه مطمئن هستید؟")) {
+                               if (activeContactId === 'global_chat') clearGlobalChat(); 
+                               else {
+                                   const chatId = getChatId(currentUser.uid, activeContactId);
+                                   clearPrivateChatHistory(chatId);
+                               }
+                           }
+                       }}
+                       onDeleteChat={() => {
+                           if(confirm("آیا از حذف این گفتگو مطمئن هستید؟")) {
+                               deleteChat(activeContact.type === 'user' ? getChatId(currentUser.uid, activeContact.id) : activeContact.id);
+                               setActiveContactId(null);
+                           }
+                       }}
+                       onBlockUser={() => {
+                           if (activeContact.type === 'user') {
+                               blockUser(currentUser.uid, activeContact.id).then(() => alert("کاربر مسدود شد."));
+                           }
+                       }}
+                       onTyping={(isTyping) => setUserTyping(currentUser.uid, isTyping)}
+                       onForwardMessage={handleOpenForward}
+                       initialScrollToMessageId={highlightMessageId}
+                   />
+               </motion.div>
            ) : (
-               <div className="h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 text-center p-6 select-none">
-                   <div className="w-24 h-24 bg-gray-200 dark:bg-white/5 rounded-full mb-6 flex items-center justify-center animate-pulse">
-                       <span className="text-4xl">👋</span>
+               !isMobile && (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 text-center p-6 select-none pointer-events-auto">
+                       <div className="w-24 h-24 bg-gray-200 dark:bg-white/5 rounded-full mb-6 flex items-center justify-center animate-pulse">
+                           <span className="text-4xl">👋</span>
+                       </div>
+                       <h2 className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">به ایران‌گرام خوش آمدید</h2>
+                       <p className="text-gray-500 max-w-xs">
+                           برای شروع گفتگو، یک مخاطب را از منوی سمت راست انتخاب کنید.
+                       </p>
                    </div>
-                   <h2 className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">به ایران‌گرام خوش آمدید</h2>
-                   <p className="text-gray-500 max-w-xs">
-                       برای شروع گفتگو، یک مخاطب را از منوی سمت راست انتخاب کنید.
-                   </p>
-               </div>
+               )
            )}
+           </AnimatePresence>
 
            {/* Profile Pane Sidebar (Right/Overlay) */}
+           <AnimatePresence>
            {showProfile && activeContact && (
-               <div className={`absolute inset-y-0 right-0 w-full md:w-80 lg:w-96 z-30 shadow-2xl transform transition-transform duration-300 ${showProfile ? 'translate-x-0' : 'translate-x-full'}`}>
+               <motion.div 
+                   initial={{ x: '100%' }}
+                   animate={{ x: 0 }}
+                   exit={{ x: '100%' }}
+                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                   className="absolute inset-y-0 right-0 w-full md:w-80 lg:w-96 z-30 shadow-2xl pointer-events-auto"
+               >
                    <ProfilePane 
                        contact={activeContact} 
                        onClose={() => setShowProfile(false)}
                        currentUserId={currentUser.uid}
                        currentUserRole={userProfile.role}
                    />
-               </div>
+               </motion.div>
            )}
+           </AnimatePresence>
        </div>
 
        {/* Admin Panel Modal */}
@@ -1109,15 +1093,13 @@ const App: React.FC = () => {
                onClose={() => setIsAdminPanelOpen(false)} 
                currentUserEmail={userProfile.email} 
                currentUserRole={userProfile.role}
-               currentUserId={userProfile.uid} // Pass current ID
+               currentUserId={userProfile.uid}
                onStartChat={(user) => {
-                   // Open chat with user logic
                    setIsAdminPanelOpen(false);
                    const existing = contacts.find(c => c.id === user.uid);
                    if (existing) {
                        handleSelectContact(user.uid);
                    } else {
-                       // Temporary add contact logic if needed
                        handleAddContact({
                            id: user.uid,
                            name: user.name,
@@ -1147,6 +1129,11 @@ const App: React.FC = () => {
            onSaveWallpaper={(wp) => {
                setWallpaper(wp);
                localStorage.setItem('irangram_wallpaper', wp);
+           }}
+           accentColor={accentColor}
+           onSaveAccentColor={(color) => {
+               setAccentColor(color);
+               localStorage.setItem('irangram_accent_color', color);
            }}
        />
 

@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'owner' | 'admin' | 'user' | 'developer' | 'guest';
 
 export interface PollOption {
@@ -20,6 +21,18 @@ export interface AdminPermissions {
     canPinMessages: boolean;
     canChangeInfo: boolean;
     canAddAdmins: boolean;
+}
+
+export interface ChatFolder {
+    id: string;
+    name: string;
+    icon: string; // e.g. 'briefcase', 'user', 'users', 'bell'
+    filters: {
+        includeTypes: ('user' | 'group' | 'channel' | 'bot')[];
+        excludeArchived: boolean;
+        excludeRead: boolean; // For "Unread" folders
+        excludeMuted: boolean;
+    };
 }
 
 export interface Message {
@@ -141,12 +154,12 @@ export interface ChatSession {
   messages: Message[];
   unreadCount: number;
   draft: string;
-  pinnedMessage?: {
+  pinnedMessages: {
     id: string;
     text: string;
     sender: string;
-    type: 'text' | 'image' | 'audio' | 'file';
-  } | null;
+    type: string;
+  }[];
 }
 
 export interface SystemInfo {
@@ -179,12 +192,12 @@ export interface ChatWindowProps {
   messages: Message[];
   myId: string; // Current User ID for checking reaction status
   myRole: UserRole;
-  pinnedMessage?: { id: string; text: string; sender: string; type: string } | null;
+  pinnedMessages?: { id: string; text: string; sender: string; type: string }[];
   onSendMessage: (content: { text?: string; imageUrl?: string; type: 'text' | 'image' | 'audio' | 'file' | 'video_note' | 'sticker' | 'poll'; audioDuration?: string; isSticker?: boolean; file?: File | Blob; fileName?: string; fileSize?: string; forwardedFrom?: any; poll?: PollData }, replyToId?: string) => void;
   onEditMessage: (messageId: string, newText: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onPinMessage: (message: Message) => void;
-  onUnpinMessage: () => void;
+  onUnpinMessage: (messageId?: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onBack: () => void;
   isMobile: boolean;

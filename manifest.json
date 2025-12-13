@@ -2,6 +2,7 @@
 {
   "short_name": "Irangram",
   "name": "Irangram Messenger",
+  "description": "یک پیام‌رسان هوشمند و مدرن شبیه تلگرام (ایران‌گرام) که به شما امکان چت تعاملی و متصل به اینترنت را می‌دهد.",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/2111/2111615.png",
@@ -14,9 +15,12 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": "./",
-  "scope": ".",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "theme_color": "#3390ec",
-  "background_color": "#ffffff"
+  "background_color": "#ffffff",
+  "lang": "fa",
+  "dir": "rtl"
 }

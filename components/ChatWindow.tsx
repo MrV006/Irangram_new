@@ -1,23 +1,25 @@
 
+
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2 } from 'lucide-react';
+import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Contact, Message, UserRole, PollData } from '../types';
 import ImageModal from './ImageModal';
 import MessageBubble from './MessageBubble';
-import { clearGlobalChat, sendReport, blockUser, checkBlockedStatus, unblockUser, isGroupAdmin, uploadMediaWithProgress, castPollVote, getChatId } from '../services/firebaseService';
+import { clearGlobalChat, sendReport, blockUser, checkBlockedStatus, unblockUser, isGroupAdmin, uploadMediaWithProgress, castPollVote, getChatId, sendPrivateMessage, sendGlobalMessage, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, setChatPin, removeChatPin, toggleMessageReaction, updateUserChatPreference } from '../services/firebaseService';
+import ForwardModal from './ForwardModal';
 
 interface ChatWindowProps {
   contact: Contact;
   messages: Message[];
   myId: string;
   myRole: UserRole;
-  pinnedMessage?: { id: string; text: string; sender: string; type: string } | null;
+  pinnedMessages?: { id: string; text: string; sender: string; type: string }[];
   onSendMessage: (content: any, replyToId?: string) => void;
   onEditMessage: (messageId: string, newText: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onPinMessage: (message: Message) => void;
-  onUnpinMessage: () => void;
+  onUnpinMessage: (messageId?: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onBack: () => void;
   isMobile: boolean;
@@ -30,39 +32,41 @@ interface ChatWindowProps {
   onBlockUser?: () => void;
   onTyping?: (isTyping: boolean) => void;
   onForwardMessage?: (message: Message) => void;
+  initialScrollToMessageId?: string; // New Prop for jumping
 }
 
 const COMMON_EMOJIS = ["😀", "😂", "🥰", "😎", "🤔", "😭", "👍", "👎", "❤️", "🔥", "👀", "✅", "💯", "🌹"];
 
-// Mock Stickers
+// Public Lottie JSON URLs
 const STICKERS = [
-    "https://cdn-icons-png.flaticon.com/512/9373/9373977.png",
-    "https://cdn-icons-png.flaticon.com/512/9374/9374028.png",
-    "https://cdn-icons-png.flaticon.com/512/9373/9373956.png",
-    "https://cdn-icons-png.flaticon.com/512/9373/9373945.png",
-    "https://cdn-icons-png.flaticon.com/512/9373/9373983.png",
-    "https://cdn-icons-png.flaticon.com/512/9374/9374003.png",
-    "https://cdn-icons-png.flaticon.com/512/9373/9373925.png",
-    "https://cdn-icons-png.flaticon.com/512/9374/9374011.png"
-];
-
-const GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKSjRrfIPjeiVyM/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0HlHFRbmaZtBRhXG/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXN6aGx2YWZqZnV6aW56aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aXZ6aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26BRv0ThflsHCqDrG/giphy.gif"
+    { id: 'cat', url: 'https://raw.githubusercontent.com/airbnb/lottie-web/master/demo/gatin/data.json' },
+    { id: 'react', url: 'https://assets3.lottiefiles.com/packages/lf20_UJNc2t.json' }, // Checkmark
+    { id: 'heart', url: 'https://assets2.lottiefiles.com/packages/lf20_w51pcehl.json' }, // Heart
+    { id: 'duck', url: 'https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json' }, // Duck (if valid, else fallback handles)
+    { id: 'loading', url: 'https://assets9.lottiefiles.com/packages/lf20_b88nh30c.json' }
 ];
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ 
-  contact, messages, myId, myRole, pinnedMessage, onSendMessage, onEditMessage, onDeleteMessage, onPinMessage, onUnpinMessage, onReaction, onBack, isMobile, onProfileClick, onAvatarClick, wallpaper, onCall, onClearHistory, onDeleteChat, onBlockUser, onTyping, onForwardMessage
+  contact, messages, myId, myRole, pinnedMessages = [], onSendMessage, onEditMessage, onDeleteMessage, onPinMessage, onUnpinMessage, onReaction, onBack, isMobile, onProfileClick, onAvatarClick, wallpaper, onCall, onClearHistory, onDeleteChat, onBlockUser, onTyping, onForwardMessage, initialScrollToMessageId
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, message: Message, isMe: boolean } | null>(null);
   
+  // Pinned Message State
+  const [activePinIndex, setActivePinIndex] = useState(0);
+
+  // Selection Mode State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+
+  // Forward Modal (Batch)
+  const [showBatchForwardModal, setShowBatchForwardModal] = useState(false);
+
   // Emoji/Sticker Panel
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [pickerTab, setPickerTab] = useState<'emoji' | 'sticker' | 'gif'>('emoji');
+  const [pickerTab, setPickerTab] = useState<'emoji' | 'sticker'>('emoji');
 
   // Poll Creator
   const [showPollCreator, setShowPollCreator] = useState(false);
@@ -132,6 +136,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           .reverse(); // Ensure chronological order if messages are reverse
   }, [messages]);
 
+  // --- Jump to Message ---
+  const handleJumpToMessage = (messageId: string) => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const bubble = el.querySelector('div[class*="rounded"]');
+          if (bubble) {
+              bubble.classList.add('bg-blue-200', 'dark:bg-blue-900', 'transition-colors', 'duration-1000');
+              setTimeout(() => {
+                  bubble.classList.remove('bg-blue-200', 'dark:bg-blue-900', 'transition-colors', 'duration-1000');
+              }, 1500);
+          }
+      } else {
+          // If message isn't rendered yet (e.g. deeply paged), we show a warning. 
+          // In this architecture, all session messages are loaded in App.tsx, so if it's there it should render unless filtered.
+          // If filtered (search), we might need to clear search first.
+          if (isSearching) {
+              setIsSearching(false);
+              setSearchQuery('');
+              // Wait for render then try again
+              setTimeout(() => handleJumpToMessage(messageId), 100);
+          } else {
+              alert("پیام در تاریخچه بارگذاری شده موجود نیست.");
+          }
+      }
+  };
+
+  // Initial Jump Effect
+  useEffect(() => {
+      if (initialScrollToMessageId && messages.length > 0) {
+          // Allow DOM to settle
+          setTimeout(() => {
+              handleJumpToMessage(initialScrollToMessageId);
+          }, 300);
+      }
+  }, [initialScrollToMessageId, messages.length]);
+
   // Permissions & Blocks
   useEffect(() => {
       const checkPermissions = async () => {
@@ -184,6 +225,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       checkPermissions();
   }, [contact, myId, myRole, isChannel, isGroup, isSystemAdmin, isGuest, isGlobalChat]);
 
+  // Adjust active pin index when pins change
+  useEffect(() => {
+      if (pinnedMessages.length === 0) setActivePinIndex(0);
+      else if (activePinIndex >= pinnedMessages.length) setActivePinIndex(pinnedMessages.length - 1);
+  }, [pinnedMessages.length]);
+
   useEffect(() => {
      const checkBlock = async () => {
          if (contact.id !== 'global_chat' && contact.id !== 'saved' && contact.type === 'user') {
@@ -198,6 +245,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
      };
      checkBlock();
   }, [contact.id, myId]);
+
+  // Reset Selection on chat change
+  useEffect(() => {
+      setIsSelectionMode(false);
+      setSelectedMessageIds(new Set());
+  }, [contact.id]);
 
   // Slow Mode Logic
   useEffect(() => {
@@ -256,7 +309,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   
   // Scroll to bottom on new message
   useEffect(() => {
-    if (!isSearching) {
+    if (!isSearching && !isSelectionMode && !initialScrollToMessageId) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages.length, replyingTo, isRecording, isSearching]);
@@ -297,6 +350,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     if(onTyping) onTyping(false);
   };
 
+  const handleSendSticker = (url: string) => {
+      if(!canWrite) return;
+      onSendMessage({
+          type: 'sticker',
+          fileUrl: url,
+          isSticker: true
+      }, replyingTo?.id);
+      setShowEmojiPicker(false);
+      setReplyingTo(null);
+  };
+
   const handleSendPoll = () => {
       if (!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2) {
           alert("لطفاً سوال و حداقل دو گزینه وارد کنید.");
@@ -322,17 +386,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       setShowPollCreator(false);
       setPollQuestion('');
       setPollOptions(['', '']);
-  };
-
-  const handleSendSticker = (url: string, type: 'sticker' | 'image' = 'sticker') => {
-      if (!canWrite) return;
-      onSendMessage({ 
-          type: type,
-          imageUrl: url, 
-          text: type === 'sticker' ? 'استیکر' : 'GIF',
-          isSticker: type === 'sticker'
-      });
-      setShowEmojiPicker(false);
   };
 
   const processFile = (file?: File, type: 'image' | 'file' = 'image') => {
@@ -363,8 +416,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
           const fileSize = (pendingAttachment.file.size / 1024 / 1024).toFixed(2) + ' MB';
           
+          // Determine if it is a video
+          const isVideo = pendingAttachment.file.type.startsWith('video/');
+          const fileType = isVideo ? 'file' : pendingAttachment.type; // Upload as file, messageBubble detects extension
+
           onSendMessage({
-              type: pendingAttachment.type,
+              type: fileType,
               imageUrl: pendingAttachment.type === 'image' ? downloadUrl : undefined,
               fileUrl: downloadUrl,
               fileName: pendingAttachment.file.name,
@@ -381,6 +438,48 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           setAttachmentCaption('');
           setReplyingTo(null);
       }
+  };
+
+  // --- Selection Logic ---
+  const handleToggleSelect = (id: string) => {
+      setSelectedMessageIds(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(id)) newSet.delete(id);
+          else newSet.add(id);
+          
+          if (newSet.size === 0) setIsSelectionMode(false);
+          return newSet;
+      });
+  };
+
+  const handleBatchDelete = async () => {
+      if (selectedMessageIds.size === 0) return;
+      if (!confirm(`آیا از حذف ${selectedMessageIds.size} پیام انتخاب شده مطمئن هستید؟`)) return;
+
+      const ids = Array.from(selectedMessageIds);
+      for (const id of ids) {
+          const msg = messages.find(m => m.id === id);
+          if (msg) {
+              if (msg.senderId === myId || myPermissions?.canDeleteMessages || isSystemAdmin || (isGroup && contact.creatorId === myId)) {
+                  onDeleteMessage(id);
+              }
+          }
+      }
+      setIsSelectionMode(false);
+      setSelectedMessageIds(new Set());
+  };
+
+  const handleBatchForward = async (targetId: string) => {
+      const msgsToForward = messages.filter(m => selectedMessageIds.has(m.id));
+      msgsToForward.sort((a, b) => a.timestamp - b.timestamp);
+      setShowBatchForwardModal(true);
+  };
+
+  const executeBatchForwardToTarget = async (targetId: string) => {
+      alert("قابلیت فوروارد چندگانه به زودی فعال می‌شود (نیاز به هماهنگی با سرور).");
+      setShowBatchForwardModal(false);
+      setIsSelectionMode(false);
+      setSelectedMessageIds(new Set());
   };
 
   // --- Recording Logic (Audio & Video) ---
@@ -497,7 +596,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       if (playingAudioId === messageId) {
           audioPlayerRef.current?.pause();
           setPlayingAudioId(null);
-          setAudioProgress(0);
       } else {
           if (audioPlayerRef.current) {
               audioPlayerRef.current.pause();
@@ -518,14 +616,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       }
   };
 
-  const scrollToMessage = (id: string) => {
-      const el = document.getElementById(`msg-${id}`);
-      if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const bubble = el.querySelector('div[class*="rounded"]'); // Target the bubble
-          if (bubble) {
-              bubble.classList.add('ring-2', 'ring-telegram-primary', 'ring-offset-2', 'transition-all');
-              setTimeout(() => bubble.classList.remove('ring-2', 'ring-telegram-primary', 'ring-offset-2'), 1500);
+  const handleSeekAudio = (messageId: string, percentage: number) => {
+      if (playingAudioId === messageId && audioPlayerRef.current) {
+          const duration = audioPlayerRef.current.duration;
+          if (duration) {
+              audioPlayerRef.current.currentTime = (percentage / 100) * duration;
+              setAudioProgress(percentage);
           }
       }
   };
@@ -570,8 +666,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       else if (date.toDateString() === yesterday.toDateString()) label = 'دیروز';
 
       return (
-          <div className="flex justify-center my-4 sticky top-2 z-20">
-              <span className="bg-black/40 dark:bg-white/10 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm shadow-sm font-bold">
+          <div className="flex justify-center my-4 sticky top-2 z-20 pointer-events-none">
+              <span className="bg-black/40 dark:bg-white/10 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm shadow-sm font-bold pointer-events-auto">
                   {label}
               </span>
           </div>
@@ -591,6 +687,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       }
   };
 
+  // --- Header Pinned Messages Logic ---
+  const activePin = pinnedMessages[activePinIndex];
+
   return (
     <div 
         className="h-full flex flex-col relative bg-telegram-bg dark:bg-telegram-bgDark overflow-hidden"
@@ -603,6 +702,77 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             processFile(file, file?.type.startsWith('image/') ? 'image' : 'file');
         }}
     >
+        {/* Emoji/Sticker Picker Panel */}
+        <AnimatePresence>
+        {showEmojiPicker && (
+            <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowEmojiPicker(false)}></div>
+                <motion.div 
+                    initial={{ y: 50, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 50, opacity: 0 }}
+                    className="absolute bottom-16 left-2 right-2 sm:right-auto sm:left-4 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border dark:border-gray-700 z-50 overflow-hidden flex flex-col h-80"
+                >
+                    {/* Picker Tabs */}
+                    <div className="flex border-b border-gray-100 dark:border-gray-700">
+                        <button 
+                            onClick={() => setPickerTab('emoji')} 
+                            className={`flex-1 py-2 text-sm font-bold transition-colors ${pickerTab === 'emoji' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                        >
+                            اموجی
+                        </button>
+                        <button 
+                            onClick={() => setPickerTab('sticker')} 
+                            className={`flex-1 py-2 text-sm font-bold transition-colors ${pickerTab === 'sticker' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                        >
+                            استیکر
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 bg-gray-50 dark:bg-black/20">
+                        {pickerTab === 'emoji' ? (
+                            <div className="grid grid-cols-6 gap-2">
+                                {COMMON_EMOJIS.map(emoji => (
+                                    <button 
+                                        key={emoji} 
+                                        onClick={() => { setInputValue(prev => prev + emoji); }} 
+                                        className="text-2xl hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg p-2 transition-colors"
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                                {/* Extended Emojis */}
+                                {"🚀✨🎉🎈🎂🎁🎄🎃🎨🎭🎪🎰🎲🎱🎳🎵🎶🎸🎹🎷🎺🎻🎼🎧🎤🎬🎥📷📹📺📻📼📼💾💿📀💻📱☎️📞PagerFax🔋🔌💻🖥️🖨️⌨️🖱️🖲️🖽💾💿📀📼📷📸📹🎥📽️🎞️📞☎️📟".split("").map((e,i) => (
+                                     <button 
+                                        key={i} 
+                                        onClick={() => { setInputValue(prev => prev + e); }} 
+                                        className="text-2xl hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg p-2 transition-colors"
+                                    >
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-2">
+                                {STICKERS.map((sticker, index) => (
+                                    <button 
+                                        key={index} 
+                                        onClick={() => handleSendSticker(sticker.url)} 
+                                        className="aspect-square bg-white dark:bg-white/5 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 flex items-center justify-center p-2 transition-all hover:scale-105"
+                                        title="ارسال استیکر"
+                                    >
+                                        <Sticker size={32} className="text-telegram-primary opacity-80" />
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            </>
+        )}
+        </AnimatePresence>
+
         {isDragging && canWrite && (
             <div className="absolute inset-0 z-50 bg-telegram-primary/80 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-fade-in">
                 <Paperclip size={64} className="mb-4 animate-bounce" />
@@ -712,6 +882,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 onClose={() => setViewingImageId(null)} 
             />
         )}
+
+        {/* Batch Forward Modal Placeholder - In real app, this reuses ForwardModal */}
+        {showBatchForwardModal && (
+            <ForwardModal 
+                isOpen={true} 
+                onClose={() => setShowBatchForwardModal(false)}
+                contacts={[]} // Should pass contacts from parent or fetch here. Empty for now to satisfy type.
+                onForward={executeBatchForwardToTarget} 
+            />
+        )}
         
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => processFile(e.target.files?.[0], 'image')} />
         <input type="file" ref={genericFileInputRef} className="hidden" onChange={(e) => processFile(e.target.files?.[0], 'file')} />
@@ -720,7 +900,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
         {/* Header */}
         <div className="relative z-50 flex flex-col shrink-0 bg-white/80 dark:bg-telegram-bgDark/80 backdrop-blur-xl border-b border-gray-100 dark:border-white/5 shadow-sm transition-all duration-300">
-            {isSearching ? (
+            {isSelectionMode ? (
+                <div className="flex items-center px-3 py-2 h-16 gap-4 animate-slide-in bg-white dark:bg-telegram-bgDark w-full">
+                    <button onClick={() => { setIsSelectionMode(false); setSelectedMessageIds(new Set()); }} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-gray-500">
+                        <X size={22} />
+                    </button>
+                    <div className="flex-1 font-bold text-lg">
+                        {selectedMessageIds.size} انتخاب شده
+                    </div>
+                    {/* Action Buttons in Header for Mobile friendliness, or keep in footer */}
+                    {!isMobile && (
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => handleBatchForward('saved')} className="p-2.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-gray-600 dark:text-gray-300" title="فوروارد">
+                                <Forward size={20} />
+                            </button>
+                            <button onClick={handleBatchDelete} className="p-2.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-red-500" title="حذف">
+                                <Trash2 size={20} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ) : isSearching ? (
                 <div className="flex items-center px-3 py-2 h-16 gap-3 animate-fade-in">
                     <button onClick={() => { setIsSearching(false); setSearchQuery(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-gray-500">
                         <ArrowRight size={22} />
@@ -763,11 +963,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         )}
                         <button onClick={() => setShowChatMenu(!showChatMenu)} className="p-2.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors relative z-50"><MoreVertical size={20} /></button>
                         
-                        {/* Improved Dropdown Menu with better visibility and logic */}
+                        {/* Dropdown Menu */}
                         {showChatMenu && (
                             <>
                                 <div className="fixed inset-0 z-[60]" onClick={() => setShowChatMenu(false)}></div>
                                 <div className="absolute top-12 left-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-700 py-2 z-[70] animate-fade-in flex flex-col">
+                                    <button onClick={() => { setIsSelectionMode(true); setShowChatMenu(false); }} className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200"><CheckCircle2 size={18} /> انتخاب پیام‌ها</button>
                                     {!isGlobalChat && contact.id !== 'saved' && (
                                         <>
                                             <button onClick={onClearHistory} className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200"><Eraser size={18} /> پاک کردن تاریخچه</button>
@@ -788,20 +989,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </div>
             )}
 
-            {/* Pinned Message Header */}
-            {pinnedMessage && !isSearching && (
+            {/* Pinned Messages Header (Multiple Support) */}
+            {pinnedMessages.length > 0 && !isSearching && !isSelectionMode && activePin && (
                 <div 
-                    onClick={() => scrollToMessage(pinnedMessage.id)}
+                    onClick={() => {
+                        handleJumpToMessage(activePin.id);
+                        if (pinnedMessages.length > 1) {
+                            setActivePinIndex((prev) => (prev + 1) % pinnedMessages.length);
+                        }
+                    }}
                     className="flex items-center justify-between px-3 py-2 bg-white/95 dark:bg-gray-800/95 border-b border-gray-100 dark:border-gray-700 backdrop-blur-sm cursor-pointer relative animate-slide-in"
                 >
-                    <div className="flex items-center gap-2 border-l-2 border-telegram-primary pl-2 overflow-hidden">
+                    <div className="flex items-center gap-2 border-l-2 border-telegram-primary pl-2 overflow-hidden flex-1">
                        <div className="flex flex-col min-w-0">
-                           <span className="text-xs font-bold text-telegram-primary">پیام سنجاق شده</span>
-                           <span className="text-xs truncate opacity-80 text-gray-700 dark:text-gray-300">{pinnedMessage.text}</span>
+                           <span className="text-xs font-bold text-telegram-primary flex items-center gap-1">
+                               پیام سنجاق شده
+                               {pinnedMessages.length > 1 && (
+                                   <span className="text-[10px] bg-telegram-primary/10 px-1 rounded-sm text-telegram-primary">
+                                       {activePinIndex + 1} از {pinnedMessages.length}
+                                   </span>
+                               )}
+                           </span>
+                           <span className="text-xs truncate opacity-80 text-gray-700 dark:text-gray-300">{activePin.text}</span>
                        </div>
                     </div>
+                    
                     {canPin && (
-                        <button onClick={(e) => { e.stopPropagation(); onUnpinMessage(); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                        <button onClick={(e) => { e.stopPropagation(); onUnpinMessage(activePin.id); }} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors ml-1">
                             <X size={14} className="text-gray-500" />
                         </button>
                     )}
@@ -822,7 +1036,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     const isPrevSame = prevMsg && prevMsg.senderId === msg.senderId;
                     const isNextSame = nextMsg && nextMsg.senderId === msg.senderId;
 
-                    // Time Grouping (e.g., if > 2 mins gap, don't group)
+                    // Time Grouping
                     const TIME_THRESHOLD = 2 * 60 * 1000;
                     const isPrevClose = prevMsg && (msg.timestamp - prevMsg.timestamp < TIME_THRESHOLD);
                     const isNextClose = nextMsg && (nextMsg.timestamp - msg.timestamp < TIME_THRESHOLD);
@@ -854,9 +1068,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                 onContextMenu={(e, m, i) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, message: m, isMe: i }); }}
                                 onMediaClick={(url, id) => setViewingImageId(id)}
                                 onPlayAudio={toggleAudio}
+                                onSeekAudio={handleSeekAudio}
                                 isPlayingAudio={playingAudioId === msg.id}
                                 audioProgress={playingAudioId === msg.id ? audioProgress : 0}
                                 repliedMessage={msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null}
+                                // Selection Props
+                                isSelectionMode={isSelectionMode}
+                                isSelected={selectedMessageIds.has(msg.id)}
+                                onToggleSelect={handleToggleSelect}
+                                onJumpToMessage={handleJumpToMessage}
                             />
                         </React.Fragment>
                     );
@@ -919,6 +1139,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             </button>
                         )}
 
+                        <button onClick={() => { setIsSelectionMode(true); setSelectedMessageIds(new Set([contextMenu.message.id])); setContextMenu(null); }} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                            <CheckCircle2 size={16} className="text-gray-500" /> انتخاب
+                        </button>
+
                         {(contextMenu.isMe || myPermissions?.canDeleteMessages || isSystemAdmin || (isGroup && contact.creatorId === myId)) && (
                             <button onClick={() => { onDeleteMessage(contextMenu.message.id); setContextMenu(null); }} className="w-full text-right px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm rounded-lg">
                                 <Trash2 size={16} /> حذف
@@ -930,7 +1154,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
 
         {/* Scroll To Bottom Button */}
-        {showScrollButton && (
+        {showScrollButton && !isSelectionMode && (
             <button 
                 onClick={scrollToBottom}
                 className="absolute bottom-20 right-4 z-40 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 p-3 rounded-full shadow-lg border border-gray-100 dark:border-gray-700 animate-fade-in hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -939,116 +1163,130 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </button>
         )}
 
-        {/* Input Area */}
-        <div className="p-2 sm:p-3 bg-white dark:bg-telegram-bgDark border-t border-gray-200 dark:border-white/5 relative z-20">
-            {isBlockedByMe ? (
-                <div className="w-full py-4 text-center text-gray-500 text-sm">شما این کاربر را مسدود کرده‌اید.</div>
-            ) : amIBlocked ? (
-                <div className="w-full py-4 text-center text-gray-500 text-sm">امکان ارسال پیام وجود ندارد.</div>
-            ) : !canWrite ? (
-                <div className="w-full py-3 flex items-center justify-center gap-2 text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5 select-none cursor-default">
-                     {isGuest && isGlobalChat ? (
-                        <>
-                            <Shield size={18} />
-                            <span className="text-sm">کاربر مهمان فقط امکان مشاهده چت عمومی را دارد.</span>
-                        </>
-                     ) : (
-                        <>
-                            <Megaphone size={18} />
-                            <span className="text-sm">فقط مدیران می‌توانند در این کانال پیام ارسال کنند.</span>
-                        </>
-                     )}
-                </div>
-            ) : (
-                <div className="flex items-end gap-2 max-w-4xl mx-auto transition-all">
-                    {/* Slow Mode Overlay */}
-                    {slowModeCooldown > 0 && !editingMessage && (
-                        <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-800/90 rounded-xl flex items-center justify-center text-sm font-bold text-red-500">
-                            لطفاً {slowModeCooldown} ثانیه صبر کنید...
-                        </div>
-                    )}
+        {/* Selection Footer (Mobile) */}
+        {isSelectionMode ? (
+            <div className="p-3 bg-white dark:bg-telegram-bgDark border-t border-gray-200 dark:border-white/5 relative z-20 flex justify-between items-center gap-2">
+                <button onClick={handleBatchDelete} disabled={selectedMessageIds.size === 0} className="flex-1 py-3 flex flex-col items-center gap-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors disabled:opacity-50">
+                    <Trash2 size={24} />
+                    <span className="text-xs font-bold">حذف ({selectedMessageIds.size})</span>
+                </button>
+                <button onClick={() => handleBatchForward('saved')} disabled={selectedMessageIds.size === 0} className="flex-1 py-3 flex flex-col items-center gap-1 text-telegram-primary hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-xl transition-colors disabled:opacity-50">
+                    <Forward size={24} />
+                    <span className="text-xs font-bold">فوروارد ({selectedMessageIds.size})</span>
+                </button>
+            </div>
+        ) : (
+            /* Input Area */
+            <div className="p-2 sm:p-3 bg-white dark:bg-telegram-bgDark border-t border-gray-200 dark:border-white/5 relative z-20">
+                {isBlockedByMe ? (
+                    <div className="w-full py-4 text-center text-gray-500 text-sm">شما این کاربر را مسدود کرده‌اید.</div>
+                ) : amIBlocked ? (
+                    <div className="w-full py-4 text-center text-gray-500 text-sm">امکان ارسال پیام وجود ندارد.</div>
+                ) : !canWrite ? (
+                    <div className="w-full py-3 flex items-center justify-center gap-2 text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5 select-none cursor-default">
+                        {isGuest && isGlobalChat ? (
+                            <>
+                                <Shield size={18} />
+                                <span className="text-sm">کاربر مهمان فقط امکان مشاهده چت عمومی را دارد.</span>
+                            </>
+                        ) : (
+                            <>
+                                <Megaphone size={18} />
+                                <span className="text-sm">فقط مدیران می‌توانند در این کانال پیام ارسال کنند.</span>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-end gap-2 max-w-4xl mx-auto transition-all">
+                        {/* Slow Mode Overlay */}
+                        {slowModeCooldown > 0 && !editingMessage && (
+                            <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-800/90 rounded-xl flex items-center justify-center text-sm font-bold text-red-500">
+                                لطفاً {slowModeCooldown} ثانیه صبر کنید...
+                            </div>
+                        )}
 
-                    {/* Replying Banner */}
-                    {replyingTo && (
-                        <div className="absolute bottom-full left-0 right-0 bg-white dark:bg-gray-800 p-2 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center animate-slide-in shadow-sm z-10">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                                <Reply className="text-telegram-primary shrink-0" size={20} />
-                                <div className="border-l-2 border-telegram-primary pl-2 flex flex-col">
-                                    <span className="text-telegram-primary text-xs font-bold">پاسخ به {replyingTo.senderName || 'پیام'}</span>
-                                    <span className="text-xs text-gray-500 truncate max-w-[200px]">{replyingTo.text || 'رسانه'}</span>
+                        {/* Replying Banner */}
+                        {replyingTo && (
+                            <div className="absolute bottom-full left-0 right-0 bg-white dark:bg-gray-800 p-2 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center animate-slide-in shadow-sm z-10">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <Reply className="text-telegram-primary shrink-0" size={20} />
+                                    <div className="border-l-2 border-telegram-primary pl-2 flex flex-col">
+                                        <span className="text-telegram-primary text-xs font-bold">پاسخ به {replyingTo.senderName || 'پیام'}</span>
+                                        <span className="text-xs text-gray-500 truncate max-w-[200px]">{replyingTo.text || 'رسانه'}</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full"><X size={16} /></button>
+                            </div>
+                        )}
+
+                        {/* Recording UI */}
+                        {isRecording ? (
+                            <div className="flex-1 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-between px-4 py-3 shadow-md animate-fade-in border border-red-100 dark:border-red-900/30">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]"></div>
+                                    <span className="font-mono text-red-500 font-bold">{formatDuration(recordingDuration)}</span>
+                                </div>
+                                
+                                {/* Video Preview Bubble */}
+                                {recordingMode === 'video' && (
+                                    <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-red-500 shadow-lg">
+                                        <video ref={videoPreviewRef} className="w-full h-full object-cover" muted />
+                                    </div>
+                                )}
+
+                                <span className="text-sm text-gray-400">در حال ضبط {recordingMode === 'audio' ? 'صدا' : 'ویدیو'}...</span>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={cancelRecording} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={20} /></button>
+                                    <button onClick={stopAndSendRecording} className="p-2 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-110 transition-transform"><Send size={18} className="rotate-180" /></button>
                                 </div>
                             </div>
-                            <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full"><X size={16} /></button>
-                        </div>
-                    )}
-
-                    {/* Recording UI */}
-                    {isRecording ? (
-                        <div className="flex-1 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-between px-4 py-3 shadow-md animate-fade-in border border-red-100 dark:border-red-900/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]"></div>
-                                <span className="font-mono text-red-500 font-bold">{formatDuration(recordingDuration)}</span>
-                            </div>
-                            
-                            {/* Video Preview Bubble */}
-                            {recordingMode === 'video' && (
-                                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-red-500 shadow-lg">
-                                    <video ref={videoPreviewRef} className="w-full h-full object-cover" muted />
+                        ) : (
+                            <>
+                                <button className="p-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => genericFileInputRef.current?.click()}><Paperclip size={24} /></button>
+                                <div className="flex-1 bg-gray-100 dark:bg-black/20 rounded-2xl flex items-center relative transition-colors focus-within:bg-white dark:focus-within:bg-black/40 focus-within:ring-1 focus-within:ring-telegram-primary/30">
+                                    <textarea
+                                        ref={inputRef}
+                                        value={inputValue}
+                                        onChange={handleInputChange}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }}}
+                                        placeholder="پیام..."
+                                        className="w-full bg-transparent border-none focus:ring-0 resize-none py-3 px-4 max-h-32 min-h-[48px] text-gray-900 dark:text-white placeholder-gray-400"
+                                        rows={1}
+                                    />
+                                    <button className="p-2 text-gray-400 hover:text-yellow-500 transition-colors" onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={24} /></button>
                                 </div>
-                            )}
-
-                            <span className="text-sm text-gray-400">در حال ضبط {recordingMode === 'audio' ? 'صدا' : 'ویدیو'}...</span>
-                            <div className="flex items-center gap-3">
-                                <button onClick={cancelRecording} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={20} /></button>
-                                <button onClick={stopAndSendRecording} className="p-2 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-110 transition-transform"><Send size={18} className="rotate-180" /></button>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <button className="p-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => genericFileInputRef.current?.click()}><Paperclip size={24} /></button>
-                            <div className="flex-1 bg-gray-100 dark:bg-black/20 rounded-2xl flex items-center relative transition-colors focus-within:bg-white dark:focus-within:bg-black/40 focus-within:ring-1 focus-within:ring-telegram-primary/30">
-                                <textarea
-                                    ref={inputRef}
-                                    value={inputValue}
-                                    onChange={handleInputChange}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }}}
-                                    placeholder="پیام..."
-                                    className="w-full bg-transparent border-none focus:ring-0 resize-none py-3 px-4 max-h-32 min-h-[48px] text-gray-900 dark:text-white placeholder-gray-400"
-                                    rows={1}
-                                />
-                                <button className="p-2 text-gray-400 hover:text-yellow-500 transition-colors" onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={24} /></button>
-                            </div>
-                            
-                            {/* Send or Mic/Video Toggle */}
-                            {inputValue.trim() ? (
-                                <button onClick={handleSend} className="p-3 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all"><Send size={24} className={inputValue ? "rotate-0" : "rotate-0"} /></button>
-                            ) : (
-                                <div className="relative group">
-                                    <button 
-                                        onMouseDown={startRecording}
-                                        onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                                        className="p-3 bg-telegram-primary/10 text-telegram-primary dark:text-white dark:bg-white/10 hover:bg-telegram-primary hover:text-white rounded-full shadow-none hover:shadow-lg transition-all active:scale-95"
-                                    >
-                                        {recordingMode === 'audio' ? <Mic size={24} /> : <Camera size={24} />}
-                                    </button>
-                                    
-                                    {/* Toggle Switch */}
-                                    {!isRecording && (
+                                
+                                {/* Send or Mic/Video Toggle */}
+                                {inputValue.trim() ? (
+                                    <button onClick={handleSend} className="p-3 bg-telegram-primary text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all"><Send size={24} className={inputValue ? "rotate-0" : "rotate-0"} /></button>
+                                ) : (
+                                    <div className="relative group">
                                         <button 
-                                            onClick={toggleRecordingMode}
-                                            className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-[10px]"
-                                            title="تغییر حالت ضبط"
+                                            onMouseDown={startRecording}
+                                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                                            className="p-3 bg-telegram-primary/10 text-telegram-primary dark:text-white dark:bg-white/10 hover:bg-telegram-primary hover:text-white rounded-full shadow-none hover:shadow-lg transition-all active:scale-95"
                                         >
-                                            {recordingMode === 'audio' ? <Video size={14}/> : <Mic size={14}/>}
+                                            {recordingMode === 'audio' ? <Mic size={24} /> : <Camera size={24} />}
                                         </button>
-                                    )}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-            )}
-        </div>
+                                        
+                                        {/* Toggle Switch */}
+                                        {!isRecording && (
+                                            <button 
+                                                onClick={toggleRecordingMode}
+                                                className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-800 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-[10px]"
+                                                title="تغییر حالت ضبط"
+                                            >
+                                                {recordingMode === 'audio' ? <Video size={14}/> : <Mic size={14}/>}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
     </div>
   );
 };

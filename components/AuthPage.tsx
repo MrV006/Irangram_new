@@ -1,6 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { User, Lock, Mail, Phone, ArrowRight, Loader2, AlertCircle, Users, Plus, X, Github, Smartphone, Eye, Key, UserCheck } from 'lucide-react';
+import { User, Lock, Mail, Phone, ArrowRight, Loader2, AlertCircle, Users, Plus, X, Github, Smartphone, Eye, Key, UserCheck, Edit2, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Lottie from 'lottie-react';
 import { registerUser, loginUser, loginWithGoogle, sendPasswordReset, loginAnonymously } from '../services/firebaseService';
 import { StoredAccount } from '../types';
 import { CONFIG } from '../config';
@@ -11,6 +14,8 @@ interface AuthPageProps {
   initialEmail?: string;
 }
 
+const DUCK_ANIMATION_URL = "https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json"; // Telegram Duck Waving
+
 const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], initialEmail = '' }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -19,6 +24,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
   const [showAccountChooser, setShowAccountChooser] = useState(storedAccounts.length > 0 && !initialEmail);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [duckAnimation, setDuckAnimation] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -26,6 +32,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     phone: '',
     password: ''
   });
+
+  // Load Lottie Animation
+  useEffect(() => {
+      fetch(DUCK_ANIMATION_URL)
+        .then(res => res.json())
+        .then(data => setDuckAnimation(data))
+        .catch(err => console.log("Failed to load animation"));
+  }, []);
 
   useEffect(() => {
       if (initialEmail) {
@@ -42,7 +56,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
           if (retryEmail === CONFIG.OWNER_EMAIL) {
                setError('حساب مدیریت یافت نشد (احتمالا حذف شده). لطفاً مجدداً ثبت‌نام کنید تا دسترسی‌ها بازیابی شود.');
           } else {
-               setError('حساب کاربری با این جیمیل یافت نشد. لطفا ابتدا ثبت نام کنید.');
+               setError('حساب کاربری با این ایمیل یافت نشد. لطفا ابتدا ثبت نام کنید.');
           }
           
           setFormData(prev => ({
@@ -74,15 +88,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     } catch (err: any) {
       console.error(err);
       
-      // Explicitly handle invalid-credential (wrong password or user not found with protection enabled)
-      // We do NOT auto-switch to signup here to avoid confusing users who just made a typo.
       if (err.code === 'auth/invalid-credential' && isLogin) {
            setError('ایمیل یا رمز عبور اشتباه است.');
            setLoading(false);
            return;
       }
 
-      // Handle explicit user-not-found (if enumeration protection is off or differently handled)
       if (err.code === 'auth/user-not-found' && isLogin) {
            setIsLogin(false); // Switch to signup
            setError('حساب کاربری با این ایمیل یافت نشد. فرم زیر را برای ثبت‌نام پر کنید.');
@@ -91,12 +102,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
       }
 
       if (err.code === 'auth/email-already-in-use') {
-          setIsLogin(true); // Auto switch to login
-          if (formData.email === CONFIG.OWNER_EMAIL) {
-              setError('حساب شما موجود است. لطفاً از دکمه "ورود با حساب گوگل" در پایین استفاده کنید تا بدون نیاز به رمز وارد شوید.');
-          } else {
-              setError('این ایمیل قبلا ثبت شده است. سیستم شما را به حالت "ورود" برد. رمز خود را وارد کنید.');
-          }
+          setIsLogin(true); 
+          setError('این ایمیل قبلا ثبت شده است. لطفاً وارد شوید.');
       }
       else if (err.code === 'auth/wrong-password') {
            setError('رمز عبور اشتباه است.');
@@ -118,19 +125,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     } catch (err: any) {
         if (err.code === 'custom/user-not-found') {
              setIsLogin(false);
-             if (formData.email === CONFIG.OWNER_EMAIL) {
-                 setError('حساب مدیریت حذف شده است. لطفاً ثبت‌نام کنید تا دوباره ساخته شود.');
-             } else {
-                 setError('حساب کاربری با این جیمیل یافت نشد. لطفا ابتدا ثبت نام کنید.');
-             }
-        } else if (err.code === 'auth/too-many-requests') {
-            setError('تعداد درخواست‌ها زیاد است. لطفاً چند دقیقه صبر کنید.');
+             setError('حساب کاربری یافت نشد. لطفا ثبت نام کنید.');
         } else if (err.code === 'auth/popup-closed-by-user') {
             setError('پنجره ورود بسته شد.');
-        } else if (err.code === 'auth/invalid-credential') {
-             setError('اطلاعات حساب گوگل معتبر نیست یا درخواست رد شد.');
         } else {
-            setError(err.message || 'خطا در ورود با گوگل');
+            setError('خطا در ورود با گوگل: ' + err.message);
         }
     } finally {
         setLoading(false);
@@ -143,11 +142,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
       try {
           await loginAnonymously();
       } catch (e: any) {
-          if (e.code === 'auth/admin-restricted-operation' || e.code === 'auth/operation-not-allowed') {
-              setError('ورود مهمان توسط مدیر سیستم غیرفعال شده است.');
-          } else {
-              setError('خطا در ورود مهمان. لطفا دوباره تلاش کنید.');
-          }
+          setError('خطا در ورود مهمان.');
       } finally {
           setLoading(false);
       }
@@ -166,8 +161,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
           setShowForgotPassword(false);
           setResetEmail('');
       } catch (e: any) {
-          if (e.code === 'auth/user-not-found') setError('کاربری با این ایمیل یافت نشد.');
-          else setError('خطا در ارسال ایمیل بازیابی.');
+          setError('خطا در ارسال ایمیل بازیابی.');
       } finally {
           setLoading(false);
       }
@@ -179,191 +173,226 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
       setIsLogin(true);
   };
 
-  const renderFooter = () => (
-      <div className="py-6 flex justify-center w-full mt-8 sm:mt-auto relative z-10">
-          <div className="bg-white/10 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10 px-6 py-2.5 rounded-full shadow-lg flex items-center gap-4 transition-transform hover:-translate-y-1 duration-300">
-              <a href="https://github.com/mrv006" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:text-telegram-primary dark:hover:text-telegram-primary transition-colors group">
-                  <div className="p-1.5 bg-white/20 rounded-full group-hover:bg-white/40 transition-colors">
-                    <Github size={18} />
-                  </div>
-                  <div className="flex flex-col">
-                      <span className="text-[10px] opacity-60 font-medium leading-none mb-0.5">Designed & Developed by</span>
-                      <span className="text-sm font-bold leading-none tracking-wide font-mono">Mr.V</span>
-                  </div>
-              </a>
-              <div className="w-px h-8 bg-gray-400/30 dark:bg-white/20"></div>
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                   <Smartphone size={16} className="opacity-70" />
-                   <span className="text-xs font-mono font-bold tracking-wider opacity-90">09902076468</span>
-              </div>
-          </div>
-      </div>
-  );
-
   if (showForgotPassword) {
       return (
-        <div className="min-h-[100dvh] w-full flex flex-col items-center bg-telegram-bg dark:bg-telegram-bgDark p-4 relative overflow-y-auto">
-            <div className="absolute inset-0 opacity-10 chat-bg-pattern pointer-events-none fixed"></div>
-            <div className="w-full flex-1 flex flex-col items-center justify-center z-10 py-10">
-                <div className="w-full max-w-md bg-white dark:bg-telegram-secondaryDark rounded-3xl shadow-2xl p-8 animate-fade-in relative">
-                    <button onClick={() => setShowForgotPassword(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600"><X size={20}/></button>
-                    <div className="text-center mb-6">
-                        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                            <Key size={32} />
-                        </div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">بازیابی رمز عبور</h2>
-                        <p className="text-sm text-gray-500 mt-2">ایمیل خود را وارد کنید تا لینک بازیابی ارسال شود.</p>
-                    </div>
-                    {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>}
-                    <form onSubmit={handleForgotPassword} className="space-y-4">
-                        <div className="relative group">
-                            <Mail className="absolute right-3 top-3 text-gray-400" size={20} />
-                            <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="ایمیل شما" className="w-full bg-gray-100 dark:bg-white/5 rounded-xl py-3 pr-10 pl-4 outline-none text-gray-900 dark:text-white dir-ltr text-right" required />
-                        </div>
-                        <button type="submit" disabled={loading} className="w-full bg-telegram-primary text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
-                             {loading ? <Loader2 className="animate-spin" /> : 'ارسال لینک'}
-                        </button>
-                    </form>
+        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-4">
+            <div className="w-full max-w-[360px] animate-fade-in flex flex-col items-center">
+                <div className="w-32 h-32 mb-6">
+                    {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
                 </div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">بازیابی رمز عبور</h2>
+                <p className="text-gray-500 text-center mb-8 text-sm">ایمیل خود را وارد کنید تا لینک بازیابی ارسال شود.</p>
+                
+                {error && <div className="mb-4 text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/10 p-2 rounded w-full">{error}</div>}
+                
+                <form onSubmit={handleForgotPassword} className="w-full space-y-6">
+                    <div className="relative group">
+                        <input 
+                            type="email" 
+                            value={resetEmail} 
+                            onChange={(e) => setResetEmail(e.target.value)} 
+                            className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                            placeholder="ایمیل"
+                            id="reset-email"
+                            required 
+                        />
+                        <label htmlFor="reset-email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                            ایمیل شما
+                        </label>
+                    </div>
+                    <div className="flex gap-3">
+                        <button type="button" onClick={() => setShowForgotPassword(false)} className="flex-1 py-3 text-telegram-primary hover:bg-telegram-primary/5 rounded-xl transition-colors font-medium">انصراف</button>
+                        <button type="submit" disabled={loading} className="flex-1 bg-telegram-primary hover:opacity-90 text-white font-bold py-3 rounded-xl flex items-center justify-center shadow-lg shadow-telegram-primary/30 transition-all">
+                             {loading ? <Loader2 className="animate-spin" /> : 'ارسال'}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
       );
   }
 
+  // Account Chooser (Telegram Style)
   if (showAccountChooser && storedAccounts.length > 0) {
       return (
-        <div className="min-h-[100dvh] w-full flex flex-col items-center bg-telegram-bg dark:bg-telegram-bgDark p-4 relative overflow-y-auto">
-             <div className="absolute inset-0 opacity-10 chat-bg-pattern pointer-events-none fixed"></div>
-             <div className="w-full flex-1 flex flex-col items-center justify-center z-10 py-10">
-                <div className="w-full max-w-md bg-white dark:bg-telegram-secondaryDark rounded-3xl shadow-2xl p-8 animate-fade-in">
-                    <div className="text-center mb-8">
-                        <div className="w-24 h-24 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-lg shadow-telegram-primary/30 p-2 overflow-hidden border-4 border-telegram-primary">
-                            <img src="https://www.tarhbama.com/cities-vector/147566" alt="Logo" className="w-full h-full object-cover" />
-                        </div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">انتخاب حساب کاربری</h1>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">برای ورود یکی از حساب‌های ذخیره شده را انتخاب کنید</p>
+        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-4">
+             <div className="w-full max-w-[360px] animate-fade-in">
+                <div className="text-center mb-8">
+                    <div className="w-32 h-32 mx-auto mb-4">
+                        {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
                     </div>
-                    <div className="space-y-3 mb-6">
-                        {storedAccounts.map(account => (
-                            <button key={account.uid} onClick={() => handleAccountSelect(account)} className="w-full bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 p-3 rounded-xl flex items-center gap-4 transition-colors border border-gray-100 dark:border-gray-700">
-                                <img src={account.avatar} className="w-12 h-12 rounded-full object-cover" />
-                                <div className="text-right flex-1">
-                                    <h3 className="font-bold text-gray-900 dark:text-white">{account.name}</h3>
-                                    <p className="text-sm text-gray-500">{account.email}</p>
-                                </div>
-                                <ArrowRight size={20} className="text-gray-400 rotate-180" />
-                            </button>
-                        ))}
-                        <button onClick={() => setShowAccountChooser(false)} className="w-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/5 p-3 rounded-xl flex items-center gap-4 transition-colors border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:text-telegram-primary">
-                            <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center"><Plus size={24} /></div>
-                            <div className="text-right flex-1"><h3 className="font-bold">استفاده از حساب دیگر</h3></div>
-                        </button>
-                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">حساب کاربری</h1>
+                    <p className="text-gray-500 text-sm">برای ادامه یکی از حساب‌های خود را انتخاب کنید</p>
                 </div>
+                
+                <div className="bg-gray-50 dark:bg-black/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5">
+                    {storedAccounts.map((account, idx) => (
+                        <div key={account.uid} onClick={() => handleAccountSelect(account)} className={`w-full hover:bg-gray-100 dark:hover:bg-white/5 p-4 flex items-center gap-4 transition-colors cursor-pointer ${idx !== storedAccounts.length - 1 ? 'border-b border-gray-200 dark:border-white/5' : ''}`}>
+                            <div className="relative">
+                                <img src={account.avatar} className="w-12 h-12 rounded-full object-cover bg-gray-200" />
+                                <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-[#1c1c1d]"></div>
+                            </div>
+                            <div className="text-right flex-1 min-w-0">
+                                <h3 className="font-bold text-gray-900 dark:text-white truncate">{account.name}</h3>
+                                <p className="text-xs text-gray-500 truncate font-mono">{account.email}</p>
+                            </div>
+                            <ChevronRight size={20} className="text-gray-400 rotate-180" />
+                        </div>
+                    ))}
+                </div>
+
+                <button onClick={() => setShowAccountChooser(false)} className="w-full mt-6 text-telegram-primary font-bold py-3 hover:bg-telegram-primary/5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <Plus size={20} />
+                    افزودن حساب کاربری
+                </button>
              </div>
-            {renderFooter()}
         </div>
       );
   }
 
+  // Main Login/Signup Form (Telegram Style)
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col items-center bg-telegram-bg dark:bg-telegram-bgDark p-4 relative overflow-y-auto">
-      <div className="absolute inset-0 opacity-10 chat-bg-pattern pointer-events-none fixed"></div>
+    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-6 transition-colors duration-300">
       
-      <div className="w-full flex-1 flex flex-col items-center justify-center z-10 py-10">
-          <div className="w-full max-w-md bg-white dark:bg-telegram-secondaryDark rounded-3xl shadow-2xl p-8 animate-fade-in border border-white/50 dark:border-white/5 relative">
-            <div className="text-center mb-8 relative">
-                {storedAccounts.length > 0 && (
-                    <button onClick={() => setShowAccountChooser(true)} className="absolute top-0 right-0 p-2 text-gray-400 hover:text-gray-600" title="بازگشت به لیست حساب‌ها">
-                        <Users size={20} />
-                    </button>
-                )}
-                <div className="w-24 h-24 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-xl shadow-telegram-primary/30 ring-4 ring-telegram-primary dark:ring-telegram-secondaryDark p-2 overflow-hidden transform hover:scale-105 transition-transform duration-500">
-                    <img src="https://www.tarhbama.com/cities-vector/147566" alt="Logo" className="w-full h-full object-cover" />
-                </div>
-                <h1 className="text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">
-                    {isLogin ? 'ورود به ایران‌گرام' : 'ساخت حساب کاربری'}
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
-                    {isLogin ? 'به گفتگوهای خود بازگردید' : 'به جمع هزاران کاربر ایرانی بپیوندید'}
-                </p>
-            </div>
+      <div className="w-full max-w-[380px] animate-fade-in flex flex-col items-center">
+          
+          {/* Logo Animation */}
+          <div className="w-36 h-36 mb-6">
+              {duckAnimation ? (
+                  <Lottie animationData={duckAnimation} loop={true} />
+              ) : (
+                  <div className="w-full h-full bg-telegram-primary/10 rounded-full flex items-center justify-center">
+                      <img src="https://cdn-icons-png.flaticon.com/512/2111/2111615.png" className="w-20 h-20" />
+                  </div>
+              )}
+          </div>
 
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+              {isLogin ? 'ورود به ایران‌گرام' : 'ثبت نام'}
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-8 px-4 leading-relaxed">
+              {isLogin ? 'لطفاً اطلاعات حساب کاربری خود را وارد کنید.' : 'برای شروع گفتگو، حساب کاربری جدید بسازید.'}
+          </p>
+
+          {/* Error/Success Messages */}
+          <AnimatePresence>
             {error && (
-                <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-start gap-2 text-right dir-rtl border border-red-100 dark:border-red-900/30" dir="rtl">
-                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                    <span className="leading-relaxed">{error}</span>
-                </div>
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
+                    <AlertCircle size={18} className="shrink-0" />
+                    <span>{error}</span>
+                </motion.div>
             )}
             {successMsg && (
-                <div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-lg flex items-start gap-2 text-right dir-rtl border border-green-100 dark:border-green-900/30" dir="rtl">
-                    <UserCheck size={16} className="mt-0.5 shrink-0" />
-                    <span className="leading-relaxed">{successMsg}</span>
-                </div>
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
+                    <UserCheck size={18} className="shrink-0" />
+                    <span>{successMsg}</span>
+                </motion.div>
             )}
+          </AnimatePresence>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {!isLogin && (
-                    <>
-                        <div className="relative group">
-                            <User className="absolute right-3 top-3 text-gray-400 group-focus-within:text-telegram-primary transition-colors" size={20} />
-                            <input type="text" name="name" autoComplete="name" placeholder="نام و نام خانوادگی" className="w-full bg-gray-100 dark:bg-white/5 border border-transparent focus:bg-white dark:focus:bg-black/20 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white font-medium placeholder:font-normal" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
-                        </div>
-                        <div className="relative group">
-                            <Phone className="absolute right-3 top-3 text-gray-400 group-focus-within:text-telegram-primary transition-colors" size={20} />
-                            <input type="tel" name="phone" autoComplete="tel" placeholder="شماره موبایل" className="w-full bg-gray-100 dark:bg-white/5 border border-transparent focus:bg-white dark:focus:bg-black/20 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white dir-ltr text-right font-medium placeholder:font-normal" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
-                        </div>
-                    </>
-                )}
+          <form onSubmit={handleSubmit} className="w-full space-y-5">
+              {!isLogin && (
+                  <div className="flex gap-4">
+                      <div className="relative group flex-1">
+                          <input 
+                            type="text" 
+                            id="name"
+                            className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all placeholder-transparent" 
+                            placeholder="Name" 
+                            value={formData.name} 
+                            onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                          />
+                          <label htmlFor="name" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                              نام
+                          </label>
+                      </div>
+                  </div>
+              )}
 
-                <div className="relative group">
-                    <Mail className="absolute right-3 top-3 text-gray-400 group-focus-within:text-telegram-primary transition-colors" size={20} />
-                    <input type="email" name="email" autoComplete="username" placeholder="ایمیل" className="w-full bg-gray-100 dark:bg-white/5 border border-transparent focus:bg-white dark:focus:bg-black/20 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white dir-ltr text-right font-medium placeholder:font-normal" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-                </div>
+              <div className="relative group">
+                  <input 
+                    type="email" 
+                    id="email"
+                    className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                    placeholder="Email" 
+                    value={formData.email} 
+                    onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                  />
+                  <label htmlFor="email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                      ایمیل
+                  </label>
+              </div>
 
-                <div className="relative group">
-                    <Lock className="absolute right-3 top-3 text-gray-400 group-focus-within:text-telegram-primary transition-colors" size={20} />
-                    <input type="password" name="password" autoComplete={isLogin ? "current-password" : "new-password"} placeholder="رمز عبور" className="w-full bg-gray-100 dark:bg-white/5 border border-transparent focus:bg-white dark:focus:bg-black/20 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white dir-ltr text-right font-medium placeholder:font-normal" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-                </div>
+              {!isLogin && (
+                  <div className="relative group">
+                      <input 
+                        type="tel" 
+                        id="phone"
+                        className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                        placeholder="Phone" 
+                        value={formData.phone} 
+                        onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                      />
+                      <label htmlFor="phone" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                          موبایل
+                      </label>
+                  </div>
+              )}
 
-                {isLogin && (
-                    <div className="text-left">
-                        <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-telegram-primary hover:underline">فراموشی رمز عبور؟</button>
-                    </div>
-                )}
+              <div className="relative group">
+                  <input 
+                    type="password" 
+                    id="password"
+                    className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                    placeholder="Password" 
+                    value={formData.password} 
+                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                  />
+                  <label htmlFor="password" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                      رمز عبور
+                  </label>
+              </div>
 
-                <button type="submit" disabled={loading} className="w-full bg-telegram-primary hover:bg-telegram-primaryDark text-white font-bold py-3 rounded-xl shadow-lg shadow-telegram-primary/30 flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed mt-6">
-                    {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'ورود' : 'ثبت نام')}
-                    {!loading && <ArrowRight size={20} className="rotate-180" />}
-                </button>
-            </form>
+              {isLogin && (
+                  <div className="flex justify-end">
+                      <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-telegram-primary font-medium hover:underline">فراموشی رمز عبور؟</button>
+                  </div>
+              )}
 
-            <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-white/10"></div></div>
-                <div className="relative flex justify-center text-sm"><span className="px-2 bg-white dark:bg-telegram-secondaryDark text-gray-500">یا</span></div>
-            </div>
-            
-            <div className="space-y-3">
-                <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                    ورود با حساب گوگل
-                </button>
+              <button type="submit" disabled={loading} className="w-full bg-telegram-primary hover:opacity-90 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-telegram-primary/30 flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-wide text-sm">
+                  {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'شروع گفتگو' : 'ثبت نام')}
+              </button>
+          </form>
 
-                <button type="button" onClick={handleGuestLogin} disabled={loading} className="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors text-sm">
-                    <Eye size={18} />
-                    ورود به عنوان مهمان (فقط مشاهده)
-                </button>
-            </div>
+          {/* Social Logins */}
+          <div className="mt-8 w-full space-y-3">
+              <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors text-sm">
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                  ورود با حساب گوگل
+              </button>
 
-            <div className="mt-6 text-center">
-                <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="text-telegram-primary hover:underline text-sm font-medium">
-                    {isLogin ? 'حساب کاربری ندارید؟ ثبت نام کنید' : 'قبلا ثبت نام کرده‌اید؟ وارد شوید'}
-                </button>
-            </div>
+              <button type="button" onClick={handleGuestLogin} disabled={loading} className="w-full bg-transparent hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
+                  <Eye size={18} />
+                  ورود مهمان
+              </button>
           </div>
+
+          {/* Toggle Login/Signup */}
+          <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="mt-8 text-telegram-primary text-sm font-bold hover:underline transition-all">
+              {isLogin ? 'حساب کاربری ندارید؟ ثبت نام کنید' : 'حساب دارید؟ وارد شوید'}
+          </button>
+
+          {storedAccounts.length > 0 && (
+              <button onClick={() => setShowAccountChooser(true)} className="mt-4 text-gray-400 text-xs flex items-center gap-1 hover:text-gray-600 transition-colors">
+                  <Users size={12} /> حساب‌های ذخیره شده
+              </button>
+          )}
       </div>
       
-      {renderFooter()}
+      {/* Footer */}
+      <div className="fixed bottom-4 text-center w-full text-[10px] text-gray-400">
+          Irangram for Web v{CONFIG.VERSION} • Designed by Mr.V
+      </div>
     </div>
   );
 };

@@ -1,6 +1,8 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Camera, Check, User, Info, Phone, AtSign, Image as ImageIcon, Loader2, Trash2, AlertTriangle, Lock, Key } from 'lucide-react';
+import { X, Camera, Check, User, Info, Phone, AtSign, Image as ImageIcon, Loader2, Trash2, AlertTriangle, Lock, Key, Palette, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { UserProfileData } from '../types';
 import { uploadMedia, requestAccountDeletion, updateUserPassword } from '../services/firebaseService';
 
@@ -11,6 +13,8 @@ interface SettingsModalProps {
   onSave: (profile: Partial<UserProfileData>) => void;
   wallpaper: string;
   onSaveWallpaper: (wallpaper: string) => void;
+  accentColor: string;
+  onSaveAccentColor: (color: string) => void;
 }
 
 const WALLPAPER_PRESETS = [
@@ -23,10 +27,21 @@ const WALLPAPER_PRESETS = [
     { id: 'pattern2', name: 'طرح ۲', value: 'https://img.freepik.com/free-vector/seamless-pattern-with-cute-cats_23-2147665476.jpg', color: '#e5e7eb' }
 ];
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProfile, onSave, wallpaper, onSaveWallpaper }) => {
+const ACCENT_COLORS = [
+    { id: 'blue', color: '#3390ec', label: 'آبی (پیش‌فرض)' },
+    { id: 'cyan', color: '#06b6d4', label: 'فیروزه‌ای' },
+    { id: 'green', color: '#10b981', label: 'سبز' },
+    { id: 'orange', color: '#f97316', label: 'نارنجی' },
+    { id: 'red', color: '#ef4444', label: 'قرمز' },
+    { id: 'purple', color: '#8b5cf6', label: 'بنفش' },
+    { id: 'pink', color: '#ec4899', label: 'صورتی' },
+];
+
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProfile, onSave, wallpaper, onSaveWallpaper, accentColor, onSaveAccentColor }) => {
   const [formData, setFormData] = useState<UserProfileData>(userProfile);
   const [activeTab, setActiveTab] = useState<'profile' | 'chat' | 'security'>('profile');
   const [tempWallpaper, setTempWallpaper] = useState(wallpaper);
+  const [tempAccentColor, setTempAccentColor] = useState(accentColor);
   const [customUrl, setCustomUrl] = useState('');
   
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -44,15 +59,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
   const isGuest = userProfile.role === 'guest';
 
   useEffect(() => {
-    setFormData(userProfile);
-    setTempWallpaper(wallpaper);
-  }, [userProfile, wallpaper, isOpen]);
-
-  if (!isOpen) return null;
+    if (isOpen) {
+        setFormData(userProfile);
+        setTempWallpaper(wallpaper);
+        setTempAccentColor(accentColor);
+    }
+  }, [isOpen]);
 
   const handleSave = () => {
     onSave(formData);
     onSaveWallpaper(tempWallpaper);
+    onSaveAccentColor(tempAccentColor);
     onClose();
   };
 
@@ -133,8 +150,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-telegram-secondaryDark w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <AnimatePresence>
+    {isOpen && (
+    <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }} 
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="bg-white dark:bg-telegram-secondaryDark w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         
         {/* Header */}
         <div className="flex flex-col border-b border-gray-100 dark:border-white/10">
@@ -161,7 +191,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                     className={`flex-1 min-w-[80px] pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'chat' ? 'border-telegram-primary text-telegram-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                 >
                     <div className="flex items-center justify-center gap-2">
-                        <ImageIcon size={18} />
+                        <Palette size={18} />
                         ظاهر
                     </div>
                 </button>
@@ -196,7 +226,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                             className={`relative group ${!isGuest ? 'cursor-pointer' : ''}`}
                             onClick={() => !isUploadingAvatar && !isGuest && fileInputRef.current?.click()}
                         >
-                            <div className="w-24 h-24 rounded-full bg-telegram-primary text-white flex items-center justify-center text-3xl font-bold shadow-lg overflow-hidden border-4 border-white dark:border-gray-700">
+                            <div 
+                                className="w-24 h-24 rounded-full text-white flex items-center justify-center text-3xl font-bold shadow-lg overflow-hidden border-4 border-white dark:border-gray-700 transition-colors"
+                                style={{ backgroundColor: tempAccentColor }}
+                            >
                                 {isUploadingAvatar ? (
                                     <Loader2 className="animate-spin" size={32} />
                                 ) : (
@@ -328,8 +361,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                 </>
             ) : activeTab === 'chat' ? (
                 <div className="p-6 space-y-6">
-                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                         یک تصویر پس‌زمینه برای گفتگوهای خود انتخاب کنید.
+                     
+                     {/* Accent Color Picker */}
+                     <div className="mb-6">
+                         <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                             <Palette size={16} /> رنگ پوسته
+                         </h4>
+                         <div className="flex flex-wrap gap-3">
+                             {ACCENT_COLORS.map(color => (
+                                 <button
+                                     key={color.id}
+                                     onClick={() => setTempAccentColor(color.color)}
+                                     className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-sm ${tempAccentColor === color.color ? 'ring-2 ring-offset-2 ring-gray-400 dark:ring-gray-500 scale-110' : ''}`}
+                                     style={{ backgroundColor: color.color }}
+                                     title={color.label}
+                                 >
+                                     {tempAccentColor === color.color && <CheckCircle2 size={20} className="text-white drop-shadow-md" />}
+                                 </button>
+                             ))}
+                         </div>
+                     </div>
+
+                     <div className="h-px bg-gray-100 dark:bg-gray-700 my-4"></div>
+
+                     {/* Wallpaper Picker */}
+                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-bold">
+                         تصویر پس‌زمینه گفتگو
                      </p>
                      
                      <div className="grid grid-cols-3 gap-3">
@@ -441,8 +498,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                 </button>
             )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 };
 
