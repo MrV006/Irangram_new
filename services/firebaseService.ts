@@ -219,7 +219,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return { uid: docSnap.id, ...doc.data() } as UserProfileData;
+            return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
         } else {
             // Check if current user info is available (for system accounts)
             if (auth?.currentUser?.uid === uid) {
@@ -318,14 +318,14 @@ export const searchUser = async (term: string): Promise<UserProfileData | null> 
         let q = query(collection(db, "users"), where("username", "==", term.replace('@', '')));
         let snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            const doc = snapshot.docs[0];
-            return { uid: doc.id, ...doc.data() } as UserProfileData;
+            const userDoc = snapshot.docs[0];
+            return { uid: userDoc.id, ...userDoc.data() } as UserProfileData;
         }
         q = query(collection(db, "users"), where("phone", "==", term));
         snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            const doc = snapshot.docs[0];
-            return { uid: doc.id, ...doc.data() } as UserProfileData;
+            const userDoc = snapshot.docs[0];
+            return { uid: userDoc.id, ...userDoc.data() } as UserProfileData;
         }
     } catch (e) {
         console.warn("User search failed (offline or other issue)");
@@ -353,123 +353,347 @@ export const syncPhoneContacts = async (phones: string[]): Promise<UserProfileDa
     return results;
 };
 
-// --- GROUPS & CHANNELS MANAGEMENT ---
+// --- CHAT & MESSAGING UTILITIES ---
 
-export const createGroup = async (name: string, description: string, imageFile: File | null, memberIds: string[], creatorId: string, isChannel: boolean = false) => {
+export const getChatId = (uid1: string, uid2: string) => {
+    return [uid1, uid2].sort().join("_");
+};
+
+export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) => {
+    if (!db) return () => {};
+    const q = query(collection(db, "global_chat"), orderBy("createdAt", "asc"), limit(100));
+    return onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().createdAt?.toMillis() || Date.now()
+        } as Message));
+        callback(messages);
+    });
+};
+
+export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
+    if (!db || !auth?.currentUser) return;
+    const msgData = {
+        ...message,
+        senderId: auth.currentUser.uid,
+        senderName: userProfile.name,
+        senderAvatar: userProfile.avatar || '',
+        createdAt: serverTimestamp(),
+        reactions: {},
+        type: message.type || 'text'
+    };
+    await addDoc(collection(db, "global_chat"), msgData);
+};
+
+export const uploadMedia = async (file: File, path: string): Promise<string> => {
+    if (!storage) throw new Error("Storage unavailable");
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
+export const uploadMediaWithProgress = async (file: File, path: string, onProgress: (progress: number) => void): Promise<string> => {
+    if (!storage) throw new Error("Storage unavailable");
+    const storageRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+        uploadTask.on('state_changed', 
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                onProgress(progress);
+            }, 
+            (error) => reject(error), 
+            async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                resolve(downloadURL);
+            }
+        );
+    });
+};
+
+export const updateUserHeartbeat = async (uid: string, status: string = 'online') => {
+    if(!db) return;
+    const userRef = doc(db, "users", uid);
+    try {
+        await updateDoc(userRef, { 
+            lastSeen: serverTimestamp(),
+            status: status 
+        });
+    } catch(e) {
+        // Silent fail
+    }
+};
+
+export const createGroup = async (name: string, description: string, imageFile: File | null, memberIds: string[], creatorId: string, isChannel: boolean) => {
     if (!db) return null;
-
-    let avatarUrl = `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`;
+    
+    let avatarUrl = `https://ui-avatars.com/api/?name=${name}&background=random&color=fff`;
     if (imageFile) {
         try {
-            const path = `groups/${Date.now()}_${imageFile.name}`;
-            avatarUrl = await uploadMedia(imageFile, path);
-        } catch (e) {
-            console.error("Group image upload failed", e);
-        }
+            avatarUrl = await uploadMedia(imageFile, `groups/${Date.now()}_${imageFile.name}`);
+        } catch (e) { console.error("Group image upload failed", e); }
     }
 
-    const finalMembers = [...new Set([...memberIds, creatorId])];
-    const type = isChannel ? 'channel' : 'group';
-
-    const groupRef = await addDoc(collection(db, "chats"), {
-        participants: finalMembers,
-        updatedAt: serverTimestamp(),
-        lastMessage: isChannel ? 'کانال ایجاد شد' : 'گروه ایجاد شد',
-        type: type,
+    const groupData = {
         name,
-        avatar: avatarUrl,
         description,
+        avatar: avatarUrl,
+        type: isChannel ? 'channel' : 'group',
         creatorId,
         admins: [creatorId],
-        adminPermissions: { [creatorId]: { canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: true } },
-        slowMode: 0,
-        pinnedMessages: [] // Initialize empty array
+        participants: [...memberIds, creatorId],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isPinned: false
+    };
+
+    const docRef = await addDoc(collection(db, "chats"), groupData);
+    return { id: docRef.id, ...groupData };
+};
+
+export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
+    if (!db) return () => {};
+    const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "asc"), limit(100));
+    return onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().createdAt?.toMillis() || Date.now()
+        } as Message));
+        callback(messages);
     });
-
-    return { id: groupRef.id, name, avatar: avatarUrl, type: type };
 };
 
-export const getGroupInviteLink = (groupId: string) => {
-    return `https://mrv006.github.io/Irangram/?join=${groupId}`;
-};
+export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
+    if (!db) throw new Error("دیتابیس متصل نیست.");
+    
+    const currentUser = auth?.currentUser;
+    const senderUid = currentUser?.uid || message.senderId;
+    
+    if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
 
-export const joinGroupViaLink = async (groupId: string, userId: string) => {
-    if (!db) return null;
-    try {
-        const chatRef = doc(db, "chats", groupId);
-        const chatSnap = await getDoc(chatRef);
-        if (!chatSnap.exists()) return null;
-        
-        const data = chatSnap.data();
-        if (data.participants && data.participants.includes(userId)) return data;
+    const chatRef = doc(db, "chats", chatId);
+    
+    const chatUpdateData: any = { 
+        updatedAt: serverTimestamp(), 
+        lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
+        lastSenderId: senderUid 
+    };
 
-        await updateDoc(chatRef, {
-            participants: arrayUnion(userId)
-        });
-        return data;
-    } catch (e) {
-        console.error("Join group error", e);
-        return null;
+    if (receiverId === 'saved') {
+         chatUpdateData.participants = arrayUnion(senderUid);
+         chatUpdateData.type = 'user'; 
+    } 
+    else {
+         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
     }
+
+    await setDoc(chatRef, chatUpdateData, { merge: true });
+    
+    const safeMessage = sanitizeData({
+        ...message,
+        senderId: senderUid,
+        senderName: userProfile.name, 
+        senderAvatar: userProfile.avatar || '', 
+        createdAt: serverTimestamp(), 
+        reactions: {},
+        type: message.type || 'text'
+    });
+    
+    await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
+};
+
+export const editPrivateMessage = async (chatId: string, messageId: string, newText: string) => {
+    if (!db) return;
+    const msgRef = doc(db, "chats", chatId, "messages", messageId);
+    await updateDoc(msgRef, { text: newText, edited: true });
+};
+
+export const setChatPin = async (chatId: string, message: any) => {
+    if (!db) return;
+    const chatRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
+    
+    const pinData = {
+        id: message.id,
+        text: message.text || 'Message',
+        sender: message.sender,
+        type: message.type
+    };
+    
+    if (chatId === 'global_chat') {
+        const snap = await getDoc(chatRef);
+        if (!snap.exists()) {
+             await setDoc(chatRef, { pinnedMessages: [pinData] });
+        } else {
+             await updateDoc(chatRef, { pinnedMessages: arrayUnion(pinData) });
+        }
+    } else {
+        await updateDoc(chatRef, { pinnedMessages: arrayUnion(pinData) });
+    }
+};
+
+export const removeChatPin = async (chatId: string, messageId?: string) => {
+    if (!db) return;
+    const chatRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
+    
+    if (messageId) {
+        const snap = await getDoc(chatRef);
+        if (snap.exists()) {
+            const data = snap.data();
+            const currentPins = data.pinnedMessages || [];
+            const updatedPins = currentPins.filter((p: any) => p.id !== messageId);
+            await updateDoc(chatRef, { pinnedMessages: updatedPins });
+        }
+    } else {
+        await updateDoc(chatRef, { pinnedMessages: [] });
+    }
+};
+
+export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => {
+    if (!db) return;
+    const msgRef = doc(db, "global_chat", messageId);
+    const snap = await getDoc(msgRef);
+    if (snap.exists()) {
+        const data = snap.data();
+        const reactions = data.reactions || {};
+        const userList = reactions[emoji] || [];
+        
+        if (userList.includes(userId)) {
+            const newList = userList.filter((id: string) => id !== userId);
+            if (newList.length === 0) delete reactions[emoji];
+            else reactions[emoji] = newList;
+        } else {
+            reactions[emoji] = [...userList, userId];
+        }
+        await updateDoc(msgRef, { reactions });
+    }
+};
+
+export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean) => {
+    if (!db) return;
+    const collectionName = isGlobal ? "global_chat" : "chats";
+    const msgRef = isGlobal 
+        ? doc(db, collectionName, messageId) 
+        : doc(db, collectionName, chatId, "messages", messageId);
+    
+    const snap = await getDoc(msgRef);
+    if (snap.exists()) {
+        const data = snap.data();
+        const poll = data.poll;
+        if (!poll || poll.isClosed) return;
+
+        const options = poll.options;
+        const targetOptionIndex = options.findIndex((o: any) => o.id === optionId);
+        if (targetOptionIndex === -1) return;
+
+        const userVotedInOption = options[targetOptionIndex].voterIds.includes(userId);
+        
+        if (userVotedInOption) {
+            options[targetOptionIndex].voterIds = options[targetOptionIndex].voterIds.filter((id: string) => id !== userId);
+        } else {
+            if (!poll.allowMultiple) {
+                options.forEach((opt: any) => {
+                    opt.voterIds = opt.voterIds.filter((id: string) => id !== userId);
+                });
+            }
+            options[targetOptionIndex].voterIds.push(userId);
+        }
+        await updateDoc(msgRef, { poll: { ...poll, options } });
+    }
+};
+
+export const setUserTyping = async (uid: string, isTyping: boolean) => {
+    if(!db) return;
+    const userRef = doc(db, "users", uid);
+    try {
+        await updateDoc(userRef, { isTyping: isTyping });
+    } catch(e) {}
+};
+
+// --- GROUP MANAGEMENT ---
+
+export const isGroupAdmin = async (chatId: string, userId: string) => {
+    if (!db) return false;
+    try {
+        const chatRef = doc(db, "chats", chatId);
+        const snap = await getDoc(chatRef);
+        if (snap.exists()) {
+            const data = snap.data();
+            return data.admins?.includes(userId) || data.creatorId === userId;
+        }
+    } catch (e) { return false; }
+    return false;
+};
+
+export const removeGroupMember = async (chatId: string, userId: string) => {
+    if (!db) return;
+    const chatRef = doc(db, "chats", chatId);
+    await updateDoc(chatRef, { 
+        participants: arrayRemove(userId),
+        admins: arrayRemove(userId)
+    });
+};
+
+export const addGroupMember = async (chatId: string, userId: string) => {
+    if (!db) return;
+    const chatRef = doc(db, "chats", chatId);
+    await updateDoc(chatRef, { participants: arrayUnion(userId) });
 };
 
 export const leaveGroup = async (chatId: string, userId: string) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
+    await updateDoc(chatRef, { 
         participants: arrayRemove(userId),
-        admins: arrayRemove(userId) 
+        admins: arrayRemove(userId)
     });
 };
 
-export const addGroupMember = async (chatId: string, targetUserId: string) => {
-    if (!db) return;
-    const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        participants: arrayUnion(targetUserId)
-    });
+export const getGroupInviteLink = (chatId: string) => {
+    return `${window.location.origin}/join/${chatId}`;
 };
 
-export const removeGroupMember = async (chatId: string, targetUserId: string) => {
-    if (!db) return;
+export const joinGroupViaLink = async (chatId: string, userId: string) => {
+     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        participants: arrayRemove(targetUserId),
-        admins: arrayRemove(targetUserId)
-    });
+    await updateDoc(chatRef, { participants: arrayUnion(userId) });
 };
 
-export const promoteToGroupAdmin = async (chatId: string, targetUserId: string) => {
+export const promoteToGroupAdmin = async (chatId: string, userId: string) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        admins: arrayUnion(targetUserId),
-        [`adminPermissions.${targetUserId}`]: { canDeleteMessages: true, canBanUsers: true, canPinMessages: true, canChangeInfo: true, canAddAdmins: false }
-    });
+    await updateDoc(chatRef, { admins: arrayUnion(userId) });
 };
 
-export const updateGroupAdminPermissions = async (chatId: string, targetUserId: string, permissions: AdminPermissions) => {
+export const demoteGroupAdmin = async (chatId: string, userId: string) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        [`adminPermissions.${targetUserId}`]: permissions
-    });
+    await updateDoc(chatRef, { admins: arrayRemove(userId) });
 };
 
-export const updateChatSlowMode = async (chatId: string, delaySeconds: number) => {
+export const updateChatSlowMode = async (chatId: string, seconds: number) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, { slowMode: delaySeconds });
+    await updateDoc(chatRef, { slowMode: seconds });
 };
 
-export const demoteGroupAdmin = async (chatId: string, targetUserId: string) => {
+export const updateGroupAdminPermissions = async (chatId: string, userId: string, permissions: AdminPermissions) => {
     if (!db) return;
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        admins: arrayRemove(targetUserId)
-    });
+    const key = `adminPermissions.${userId}`;
+    await updateDoc(chatRef, { [key]: permissions });
 };
 
+export const getGroupDetails = async (chatId: string) => {
+    if (!db) return null;
+    const chatRef = doc(db, "chats", chatId);
+    const snap = await getDoc(chatRef);
+    return snap.exists() ? snap.data() : null;
+};
+
+// --- MISC UTILS & EXISTING EXPORTS ---
 export const getGroupMembers = async (chatId: string): Promise<UserProfileData[]> => {
     if (!db) return [];
     try {
@@ -498,46 +722,6 @@ export const getGroupMembers = async (chatId: string): Promise<UserProfileData[]
     }
 };
 
-export const getGroupDetails = async (chatId: string) => {
-    if (!db) return null;
-    try {
-        const chatRef = doc(db, "chats", chatId);
-        const snap = await getDoc(chatRef);
-        return snap.exists() ? snap.data() : null;
-    } catch(e) {
-        return null;
-    }
-};
-
-export const isGroupAdmin = async (chatId: string, userId: string): Promise<boolean> => {
-    if (!db) return false;
-    try {
-        const chatRef = doc(db, "chats", chatId);
-        const chatSnap = await getDoc(chatRef);
-        if (chatSnap.exists()) {
-            const admins = chatSnap.data().admins || [];
-            const creator = chatSnap.data().creatorId;
-            return admins.includes(userId) || creator === userId;
-        }
-    } catch(e) {}
-    return false;
-};
-
-// --- PRESENCE & HEARTBEAT ---
-export const updateUserHeartbeat = async (uid: string, status: 'online' | 'offline') => {
-    if(!db) return;
-    const userRef = doc(db, "users", uid);
-    try {
-        await updateDoc(userRef, { status: status, lastSeen: serverTimestamp() });
-    } catch(e) { console.error("Heartbeat error", e); }
-};
-
-export const setUserTyping = async (uid: string, isTyping: boolean) => {
-    if (!db) return;
-    const userRef = doc(db, "users", uid);
-    try { await updateDoc(userRef, { status: isTyping ? 'typing...' : 'online' }); } catch(e) {}
-};
-
 export const subscribeToAllUsers = (callback: (users: Partial<UserProfileData>[]) => void) => {
     if(!db) return () => {};
     const q = query(collection(db, "users"));
@@ -553,76 +737,6 @@ export const subscribeToAllUsers = (callback: (users: Partial<UserProfileData>[]
     }, (error) => console.warn("AllUsers Listener Error:", error));
 };
 
-// --- STORAGE ---
-export const uploadMedia = async (file: File | Blob, path: string): Promise<string> => {
-    if (!storage) throw new Error("Storage not available");
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-};
-
-export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgress: (progress: number) => void): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        if (!storage) {
-            reject(new Error("Storage not available"));
-            return;
-        }
-        const storageRef = ref(storage, path);
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        uploadTask.on('state_changed', 
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                onProgress(progress);
-            }, 
-            (error) => {
-                reject(error);
-            }, 
-            async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                resolve(downloadURL);
-            }
-        );
-    });
-};
-
-export const setChatPin = async (chatId: string, message: { id: string, text: string, sender: string, type: string }) => {
-    if (!db) return;
-    if (chatId === 'global_chat') {
-        await setDoc(doc(db, "chat_metadata", chatId), { pinnedMessages: arrayUnion(message), updatedAt: serverTimestamp() }, { merge: true });
-    } else {
-        await updateDoc(doc(db, "chats", chatId), { pinnedMessages: arrayUnion(message) });
-    }
-};
-
-export const removeChatPin = async (chatId: string, messageId?: string) => {
-    if (!db) return;
-    const docRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
-    
-    // We need to read the doc to find the exact object to remove if we only have ID, 
-    // but typically arrayRemove needs equality. 
-    // To simplify, we will read the current pins, filter out the target, and update.
-    try {
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-            const data = snap.data();
-            const currentPins = data.pinnedMessages || [];
-            // If messageId is provided, remove only that one. If not, remove all (legacy behavior) or last one.
-            // Let's remove specific ID.
-            if (messageId) {
-                const updatedPins = currentPins.filter((p: any) => p.id !== messageId);
-                await updateDoc(docRef, { pinnedMessages: updatedPins });
-            } else {
-                // Fallback: Clear all if no ID passed (or maybe just pop last?)
-                // Let's clear all for safety if no ID, but UI should pass ID.
-                await updateDoc(docRef, { pinnedMessages: [] });
-            }
-        }
-    } catch(e) {
-        console.error("Remove pin failed", e);
-    }
-};
-
 export const subscribeToChatPin = (chatId: string, callback: (data: any[]) => void) => {
     if (!db) return () => {};
     const docRef = chatId === 'global_chat' ? doc(db, "chat_metadata", chatId) : doc(db, "chats", chatId);
@@ -630,7 +744,6 @@ export const subscribeToChatPin = (chatId: string, callback: (data: any[]) => vo
     return onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
-            // Handle both legacy 'pinnedMessage' and new 'pinnedMessages'
             if (data.pinnedMessages && Array.isArray(data.pinnedMessages)) {
                 callback(data.pinnedMessages);
             } else if (data.pinnedMessage) {
@@ -644,145 +757,26 @@ export const subscribeToChatPin = (chatId: string, callback: (data: any[]) => vo
     }, (error) => console.warn("Pin Listener Error:", error));
 };
 
-export const getChatId = (uid1: string, uid2: string) => {
-    if (uid2 === 'saved') return `saved_${uid1}`;
-    if (uid2 === 'gemini_bot') return `gemini_bot_${uid1}`;
-    return [uid1, uid2].sort().join('_');
-};
-
-export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) => {
-    if (!db) return () => {};
-    const q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(50));
-    return onSnapshot(q, (querySnapshot) => {
-        const messages: Message[] = [];
-        querySnapshot.forEach((d) => {
-            const data = d.data();
-            messages.push({ id: d.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
-        });
-        callback(messages.reverse());
-    }, (error) => console.warn("GlobalChat Listener Error:", error));
-};
-
-export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string, role?: UserRole }) => {
-    if (!db) {
-        throw new Error("دیتابیس متصل نیست.");
-    }
-    
-    const currentUser = auth?.currentUser;
-    if (!currentUser) throw new Error("کاربر احراز هویت نشده است.");
-
-    let finalText = message.text || '';
-    
-    // Filter words
-    if (finalText && message.type === 'text') {
-        if (localBannedWords.length > 0) {
-             localBannedWords.forEach(word => { 
-                 const regex = new RegExp(word, 'gi'); 
-                 finalText = finalText.replace(regex, '*'.repeat(word.length)); 
-             });
-        }
-    }
-    
-    const safeMessage = sanitizeData({
-        ...message,
-        text: finalText,
-        senderId: currentUser.uid,
-        senderName: userProfile.name,
-        senderAvatar: userProfile.avatar || '',
-        senderRole: userProfile.role || 'user',
-        createdAt: serverTimestamp(),
-        edited: false,
-        reactions: {},
-        type: message.type || 'text'
-    });
-
-    await addDoc(collection(db, "global_chat"), safeMessage);
-};
-
-export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
-    if (!db) return () => {};
-    const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(50));
-    return onSnapshot(q, (querySnapshot) => {
-        const messages: Message[] = [];
-        querySnapshot.forEach((d) => {
-            const data = d.data();
-            messages.push({ id: d.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
-        });
-        callback(messages.reverse());
-    }, (error) => console.warn("PrivateChat Listener Error:", error));
-};
-
-export const editPrivateMessage = async (chatId: string, messageId: string, newText: string) => {
-    if (!db) return;
-    try { await updateDoc(doc(db, "chats", chatId, "messages", messageId), { text: newText, edited: true }); } catch (e) {}
-};
-
 export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => void) => {
     if (!db) return () => {};
     
-    // Listen for chats where the user is a participant
     const q = query(collection(db, "chats"), where("participants", "array-contains", uid));
     
     return onSnapshot(q, (querySnapshot) => {
-        const chats = querySnapshot.docs.map(doc => {
-            const data = doc.data() as any;
+        const chats = querySnapshot.docs.map(d => {
+            const data = d.data() as any;
             return { 
-                id: doc.id, 
+                id: d.id, 
                 ...data, 
                 updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toMillis() : Date.now(),
                 pinnedMessages: data.pinnedMessages || (data.pinnedMessage ? [data.pinnedMessage] : [])
             };
         });
-        // Sort in client side to handle potential timestamp issues
         chats.sort((a, b) => b.updatedAt - a.updatedAt);
         callback(chats);
     }, (error) => console.warn("UserChats Listener Error:", error));
 };
 
-export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
-    if (!db) throw new Error("دیتابیس متصل نیست.");
-    
-    const currentUser = auth?.currentUser;
-    // We prioritize auth.currentUser. If called by bot/admin spoofing, senderId might be in message.
-    const senderUid = currentUser?.uid || message.senderId;
-    
-    if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
-
-    const chatRef = doc(db, "chats", chatId);
-    
-    const chatUpdateData: any = { 
-        updatedAt: serverTimestamp(), 
-        lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
-        lastSenderId: senderUid 
-    };
-
-    // If it's saved messages
-    if (receiverId === 'saved') {
-         chatUpdateData.participants = arrayUnion(senderUid);
-         chatUpdateData.type = 'user'; // Explicitly set type 'user' for saved messages so App.tsx recognizes it
-    } 
-    // If it's a direct message (not a group ID we know)
-    else {
-         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
-    }
-
-    await setDoc(chatRef, chatUpdateData, { merge: true });
-    
-    const safeMessage = sanitizeData({
-        ...message,
-        senderId: senderUid,
-        senderName: userProfile.name, 
-        senderAvatar: userProfile.avatar || '', 
-        createdAt: serverTimestamp(), 
-        reactions: {},
-        type: message.type || 'text'
-    });
-    
-    await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
-};
-
-export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean = false) => { if (!db) return; const collectionPath = isGlobal ? "global_chat" : `chats/${chatId}/messages`; const msgRef = doc(db, collectionPath, messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const poll = data.poll as PollData; if (poll.isClosed) return; let newOptions = poll.options.map(opt => { const hasVotedThis = opt.voterIds.includes(userId); if (opt.id === optionId) { if (hasVotedThis) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; else return { ...opt, voterIds: [...opt.voterIds, userId] }; } else { if (!poll.allowMultiple && opt.voterIds.includes(userId)) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; } return opt; }); await updateDoc(msgRef, { "poll.options": newOptions }); } } catch(e) { console.error("Voting failed", e); } };
-export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => { if (!db) return; const msgRef = doc(db, "global_chat", messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const reactions = data.reactions || {}; const userList = reactions[emoji] || []; let newReactions = { ...reactions }; if (userList.includes(userId)) { newReactions[emoji] = userList.filter((id: string) => id !== userId); if (newReactions[emoji].length === 0) delete newReactions[emoji]; } else { newReactions[emoji] = [...userList, userId]; } await updateDoc(msgRef, { reactions: newReactions }); } } catch (e) {} };
 export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean, globalScreenshotRestriction?: boolean }) => void) => { if (!db) return () => {}; const docRef = doc(db, "system", "info"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); callback({ currentVersion: data.currentVersion || CONFIG.VERSION, lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0, maintenanceMode: data.maintenanceMode || false, globalScreenshotRestriction: data.globalScreenshotRestriction || false }); } else { setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false }); } }, (error) => console.warn("SystemInfo Listener Error:", error)); };
 export const checkAndTriggerCleanup = async () => { if (!db) return; };
 export const triggerSystemUpdate = async () => { if(!db) return; await setDoc(doc(db, "system", "info"), { forceUpdate: serverTimestamp() }, { merge: true }); };

@@ -1,11 +1,11 @@
 
-
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { motion, PanInfo, useAnimation } from 'framer-motion';
 import { Message, UserRole } from '../types';
 import { Check, CheckCheck, Play, Pause, FileText, Download, CornerUpRight, Reply, Share, Copy, Trash2, Pin, BarChart2, Shield, Crown, Code, X, Circle, CheckCircle } from 'lucide-react';
 import { castPollVote } from '../services/firebaseService';
 import VideoPlayer from './VideoPlayer';
+// @ts-ignore
 import Lottie from 'lottie-react';
 
 interface MessageBubbleProps {

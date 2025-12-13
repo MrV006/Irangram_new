@@ -143,11 +143,12 @@ const Sidebar: React.FC<SidebarProps> = ({
 
               session.messages.forEach(msg => {
                   // Message Text Search
-                  if (msg.type === 'text' && msg.text && msg.text.toLowerCase().includes(term)) {
-                      matchedMessages.push({ msg, chat: contact });
-                  }
-                  // File Name Search
-                  if (msg.type === 'file' || msg.type === 'image' || msg.type === 'audio' || msg.type === 'video_note') {
+                  if (msg.type === 'text') {
+                      if (msg.text && msg.text.toLowerCase().includes(term)) {
+                          matchedMessages.push({ msg, chat: contact });
+                      }
+                  } else if (msg.type === 'file' || msg.type === 'image' || msg.type === 'audio' || msg.type === 'video_note') {
+                      // File Name Search
                       if (msg.fileName && msg.fileName.toLowerCase().includes(term)) {
                           matchedFiles.push({ msg, chat: contact });
                       } else if (msg.text && msg.text.toLowerCase().includes(term)) {

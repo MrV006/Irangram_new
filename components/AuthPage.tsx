@@ -1,8 +1,8 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { User, Lock, Mail, Phone, ArrowRight, Loader2, AlertCircle, Users, Plus, X, Github, Smartphone, Eye, Key, UserCheck, Edit2, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+// @ts-ignore
 import Lottie from 'lottie-react';
 import { registerUser, loginUser, loginWithGoogle, sendPasswordReset, loginAnonymously } from '../services/firebaseService';
 import { StoredAccount } from '../types';
