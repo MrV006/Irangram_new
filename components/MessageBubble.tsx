@@ -1,5 +1,4 @@
 
-
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { motion, PanInfo, useAnimation } from 'framer-motion';
 import { Message, UserRole } from '../types';
@@ -73,28 +72,48 @@ const Waveform: React.FC<{ progress: number; isPlaying: boolean; id: string; isM
     );
 };
 
+// --- Role Styles Helper ---
+const getRoleStyles = (role?: UserRole) => {
+    switch (role) {
+        case 'owner':
+            return {
+                badge: 'bg-gradient-to-r from-amber-400 to-orange-600 text-white shadow-md shadow-orange-500/30 border border-amber-300/20',
+                name: 'text-amber-600 dark:text-amber-400',
+                label: 'مدیر کل',
+                icon: <Crown size={11} fill="currentColor" />
+            };
+        case 'developer':
+            return {
+                badge: 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-500/30 border border-cyan-300/20',
+                name: 'text-cyan-600 dark:text-cyan-400',
+                label: 'برنامه‌نویس',
+                icon: <Code size={11} />
+            };
+        case 'admin':
+            return {
+                badge: 'bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30 border border-rose-300/20',
+                name: 'text-rose-600 dark:text-rose-400',
+                label: 'ادمین',
+                icon: <Shield size={11} />
+            };
+        default:
+            return {
+                badge: '',
+                name: 'text-telegram-primary',
+                label: '',
+                icon: null
+            };
+    }
+};
+
 const RoleBadge: React.FC<{ role?: UserRole }> = ({ role }) => {
     if (!role || role === 'user' || role === 'guest') return null;
 
-    let icon = <Shield size={10} />;
-    let text = 'ادمین';
-    let bgClass = 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
-
-    if (role === 'owner') {
-        icon = <Crown size={10} fill="currentColor" />;
-        text = 'مدیر کل';
-        bgClass = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700';
-    } else if (role === 'developer') {
-        icon = <Code size={10} />;
-        text = 'برنامه‌نویس';
-        bgClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-700';
-    } else if (role === 'admin') {
-        bgClass = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-700';
-    }
+    const styles = getRoleStyles(role);
 
     return (
-        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ml-2 align-middle ${bgClass}`}>
-            {icon} {text}
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 select-none ${styles.badge}`}>
+            {styles.icon} {styles.label}
         </span>
     );
 };
@@ -106,38 +125,46 @@ const PollBubble: React.FC<{ message: Message; isMe: boolean }> = ({ message, is
     const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.voterIds?.length || 0), 0);
     
     return (
-        <div className="min-w-[280px]">
-            <div className="font-bold text-sm mb-4 flex items-start gap-2 opacity-90">
-                <BarChart2 size={18} className="mt-0.5 shrink-0" />
+        <div className="min-w-[280px] w-full">
+            <div className="font-bold text-sm mb-4 flex items-start gap-2 opacity-90 px-1">
+                <BarChart2 size={18} className="mt-0.5 shrink-0 text-telegram-primary" />
                 <span className="leading-tight">{poll.question}</span>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-2">
                 {poll.options.map(opt => {
                     const votes = opt.voterIds?.length || 0;
                     const percent = totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100);
+                    const isSelected = opt.voterIds?.some(id => id === 'me'); // Simplified check, logic handled in parent
                     
                     return (
                         <div 
                             key={opt.id} 
-                            className="relative rounded-lg overflow-hidden cursor-pointer group isolate"
+                            className="relative rounded-xl overflow-hidden cursor-pointer group isolate border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5"
                             onClick={() => {
                                 const event = new CustomEvent('poll-vote', { detail: { messageId: message.id, optionId: opt.id } });
                                 window.dispatchEvent(event);
                             }}
                         >
-                            <div className={`absolute inset-0 bg-black/5 dark:bg-white/10 transition-all duration-700 ease-out z-0`} style={{ width: `${percent}%` }}></div>
-                            <div className="relative p-2.5 flex justify-between items-center z-10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                <span className="text-sm font-medium">{opt.text}</span>
-                                <div className="flex items-center gap-2">
+                            {/* Progress Bar Background */}
+                            <div 
+                                className={`absolute inset-y-0 right-0 transition-all duration-700 ease-out z-0 ${isMe ? 'bg-green-200/50 dark:bg-green-500/20' : 'bg-blue-200/50 dark:bg-blue-500/20'}`} 
+                                style={{ width: `${percent}%` }}
+                            ></div>
+                            
+                            {/* Content */}
+                            <div className="relative p-3 flex justify-between items-center z-10 w-full">
+                                <span className="text-sm font-medium z-10 truncate ml-2">{opt.text}</span>
+                                <div className="flex items-center gap-2 shrink-0">
                                     <span className="text-xs font-bold opacity-70">{percent}%</span>
+                                    {/* Optional: Add checkmark if voted */}
                                 </div>
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex justify-between items-center text-[10px] opacity-60 font-mono">
-                <span>{totalVotes} رای</span>
+            <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex justify-between items-center text-[11px] opacity-60 font-medium px-1">
+                <span>{totalVotes.toLocaleString('fa-IR')} رای</span>
                 <span>{poll.allowMultiple ? 'چند انتخابی' : 'تک انتخابی'}</span>
             </div>
         </div>
@@ -198,23 +225,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     };
 
     // --- Correct RTL Logic ---
-    // In RTL, "Me" is typically on the Right side (visually start). "Other" is on the Left side (visually end).
-    // Telegram Style in RTL:
-    // Me (Right side):
-    //   - Left corners always rounded.
-    //   - Right corners depend on grouping (First: Top-Right rounded, Bottom-Right sharp-ish; Last: Top-Right sharp-ish, Bottom-Right rounded; etc).
-    // Let's implement Telegram-like bubble shapes.
-    
     let borderRadiusClass = '';
     
     if (isMe) {
-        // Me (Right)
-        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-md rounded-br-md'; // Standalone
-        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-2xl rounded-br-sm'; // First
-        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-2xl'; // Last
-        else borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-sm'; // Middle
+        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-md rounded-br-md'; 
+        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-2xl rounded-br-sm'; 
+        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-2xl'; 
+        else borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-sm'; 
     } else {
-        // Other (Left)
         if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-md rounded-bl-md';
         else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-2xl rounded-bl-sm';
         else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-sm rounded-bl-2xl';
@@ -233,8 +251,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     const paddingClass = isTransparent ? 'p-0' : 'px-3 py-2';
     const timeString = new Date(message.timestamp).toLocaleTimeString('fa-IR', {hour:'2-digit', minute:'2-digit'});
 
-    // Alignment: Me = Right (justify-start in RTL context), Other = Left (justify-end in RTL context)
     const alignmentClass = isMe ? 'justify-start' : 'justify-end';
+
+    const styles = getRoleStyles(message.senderRole);
 
     return (
         <div 
@@ -242,10 +261,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             onClick={handleBubbleClick}
             className={`flex w-full mb-1 relative group/msg transition-colors ${isSelectionMode ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 py-1 -my-1' : ''} ${alignmentClass}`}
         >
-             {/* Selection Overlay */}
              {isSelected && <div className="absolute inset-0 bg-telegram-primary/10 dark:bg-telegram-primary/20 z-0 rounded"></div>}
 
-             {/* Checkbox for Selection */}
              {isSelectionMode && (
                  <div className="flex items-center justify-center pl-2 pr-2 z-20 shrink-0 cursor-pointer" onClick={() => onToggleSelect(message.id)}>
                      {isSelected ? (
@@ -268,7 +285,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 className={`relative z-10 flex max-w-[85%] sm:max-w-[75%] flex-row items-end gap-2 animate-pop ${isSelected ? 'translate-x-0' : ''}`}
                 onContextMenu={(e) => { if (!isSelectionMode) onContextMenu(e, message, isMe); }}
              >
-                {/* Avatar (For Others - Visual End in RTL is Left) */}
                 {!isMe && !isSelectionMode && (
                     <div className="w-8 shrink-0 flex flex-col justify-end pb-1 order-last">
                         {showAvatar ? (
@@ -279,15 +295,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </div>
                 )}
 
-                {/* The Bubble */}
                 <div className={`
                     ${paddingClass} text-[15px] leading-relaxed break-words min-w-[4.5rem] relative transition-all overflow-hidden
                     ${!isTransparent && borderRadiusClass} ${bubbleBg}
                 `}>
-                    {/* Sender Name & Role */}
+                    {/* Sender Name & Role - UPDATED Layout */}
                     {(!isTransparent) && showSenderName && !isMe && (
-                        <div className={`text-xs font-bold mb-1 text-telegram-primary cursor-pointer hover:underline truncate max-w-[200px] flex items-center`}>
-                            {message.senderName}
+                        <div className="flex flex-wrap items-center gap-2 mb-1 cursor-pointer hover:underline max-w-full">
+                            <span className={`text-xs font-bold truncate max-w-[160px] ${styles.name}`}>
+                                {message.senderName}
+                            </span>
                             <RoleBadge role={message.senderRole} />
                         </div>
                     )}

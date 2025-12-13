@@ -658,7 +658,7 @@ const Sidebar: React.FC<SidebarProps> = ({
          
          {/* Dynamic Folder Tabs (Only show if NOT searching) */}
          {!isSearchingGlobal && (
-             <div className="flex overflow-x-auto no-scrollbar gap-1 border-b border-gray-100 dark:border-white/5 pb-1">
+             <div className="flex overflow-x-auto gap-1 border-b border-gray-100 dark:border-white/5 pb-1">
                  <button 
                     onClick={() => setActiveFolderId('all')}
                     className={`px-3 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-colors relative flex items-center gap-1 ${activeFolderId === 'all' ? 'bg-telegram-primary text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}`}
@@ -696,7 +696,7 @@ const Sidebar: React.FC<SidebarProps> = ({
          )}
       </div>
       
-       <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+       <div className="flex-1 overflow-y-auto p-2 pb-20">
             {isSearchingGlobal ? (
                 // GLOBAL SEARCH RESULTS UI
                 <div className="space-y-4 animate-fade-in">

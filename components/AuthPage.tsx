@@ -178,38 +178,40 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
 
   if (showForgotPassword) {
       return (
-        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-4">
-            <div className="w-full max-w-[360px] animate-fade-in flex flex-col items-center">
-                <div className="w-32 h-32 mb-6">
-                    {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
+        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] transition-colors duration-300 overflow-y-auto">
+            <div className="min-h-full w-full flex flex-col items-center justify-center p-6 py-10">
+                <div className="w-full max-w-[360px] animate-fade-in flex flex-col items-center">
+                    <div className="w-32 h-32 mb-6">
+                        {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">بازیابی رمز عبور</h2>
+                    <p className="text-gray-500 text-center mb-8 text-sm">ایمیل خود را وارد کنید تا لینک بازیابی ارسال شود.</p>
+                    
+                    {error && <div className="mb-4 text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/10 p-2 rounded w-full">{error}</div>}
+                    
+                    <form onSubmit={handleForgotPassword} className="w-full space-y-6">
+                        <div className="relative group">
+                            <input 
+                                type="email" 
+                                value={resetEmail} 
+                                onChange={(e) => setResetEmail(e.target.value)} 
+                                className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                                placeholder="ایمیل"
+                                id="reset-email"
+                                required 
+                            />
+                            <label htmlFor="reset-email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                                ایمیل شما
+                            </label>
+                        </div>
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setShowForgotPassword(false)} className="flex-1 py-3 text-telegram-primary hover:bg-telegram-primary/5 rounded-xl transition-colors font-medium">انصراف</button>
+                            <button type="submit" disabled={loading} className="flex-1 bg-telegram-primary hover:opacity-90 text-white font-bold py-3 rounded-xl flex items-center justify-center shadow-lg shadow-telegram-primary/30 transition-all">
+                                {loading ? <Loader2 className="animate-spin" /> : 'ارسال'}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">بازیابی رمز عبور</h2>
-                <p className="text-gray-500 text-center mb-8 text-sm">ایمیل خود را وارد کنید تا لینک بازیابی ارسال شود.</p>
-                
-                {error && <div className="mb-4 text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/10 p-2 rounded w-full">{error}</div>}
-                
-                <form onSubmit={handleForgotPassword} className="w-full space-y-6">
-                    <div className="relative group">
-                        <input 
-                            type="email" 
-                            value={resetEmail} 
-                            onChange={(e) => setResetEmail(e.target.value)} 
-                            className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
-                            placeholder="ایمیل"
-                            id="reset-email"
-                            required 
-                        />
-                        <label htmlFor="reset-email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
-                            ایمیل شما
-                        </label>
-                    </div>
-                    <div className="flex gap-3">
-                        <button type="button" onClick={() => setShowForgotPassword(false)} className="flex-1 py-3 text-telegram-primary hover:bg-telegram-primary/5 rounded-xl transition-colors font-medium">انصراف</button>
-                        <button type="submit" disabled={loading} className="flex-1 bg-telegram-primary hover:opacity-90 text-white font-bold py-3 rounded-xl flex items-center justify-center shadow-lg shadow-telegram-primary/30 transition-all">
-                             {loading ? <Loader2 className="animate-spin" /> : 'ارسال'}
-                        </button>
-                    </div>
-                </form>
             </div>
         </div>
       );
@@ -218,36 +220,38 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
   // Account Chooser (Telegram Style)
   if (showAccountChooser && storedAccounts.length > 0) {
       return (
-        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-4">
-             <div className="w-full max-w-[360px] animate-fade-in">
-                <div className="text-center mb-8">
-                    <div className="w-32 h-32 mx-auto mb-4">
-                        {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
-                    </div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">حساب کاربری</h1>
-                    <p className="text-gray-500 text-sm">برای ادامه یکی از حساب‌های خود را انتخاب کنید</p>
-                </div>
-                
-                <div className="bg-gray-50 dark:bg-black/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5">
-                    {storedAccounts.map((account, idx) => (
-                        <div key={account.uid} onClick={() => handleAccountSelect(account)} className={`w-full hover:bg-gray-100 dark:hover:bg-white/5 p-4 flex items-center gap-4 transition-colors cursor-pointer ${idx !== storedAccounts.length - 1 ? 'border-b border-gray-200 dark:border-white/5' : ''}`}>
-                            <div className="relative">
-                                <img src={account.avatar} className="w-12 h-12 rounded-full object-cover bg-gray-200" />
-                                <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-[#1c1c1d]"></div>
-                            </div>
-                            <div className="text-right flex-1 min-w-0">
-                                <h3 className="font-bold text-gray-900 dark:text-white truncate">{account.name}</h3>
-                                <p className="text-xs text-gray-500 truncate font-mono">{account.email}</p>
-                            </div>
-                            <ChevronRight size={20} className="text-gray-400 rotate-180" />
+        <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] transition-colors duration-300 overflow-y-auto">
+             <div className="min-h-full w-full flex flex-col items-center justify-center p-6 py-10">
+                 <div className="w-full max-w-[360px] animate-fade-in">
+                    <div className="text-center mb-8">
+                        <div className="w-32 h-32 mx-auto mb-4">
+                            {duckAnimation && <Lottie animationData={duckAnimation} loop={true} />}
                         </div>
-                    ))}
-                </div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">حساب کاربری</h1>
+                        <p className="text-gray-500 text-sm">برای ادامه یکی از حساب‌های خود را انتخاب کنید</p>
+                    </div>
+                    
+                    <div className="bg-gray-50 dark:bg-black/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5">
+                        {storedAccounts.map((account, idx) => (
+                            <div key={account.uid} onClick={() => handleAccountSelect(account)} className={`w-full hover:bg-gray-100 dark:hover:bg-white/5 p-4 flex items-center gap-4 transition-colors cursor-pointer ${idx !== storedAccounts.length - 1 ? 'border-b border-gray-200 dark:border-white/5' : ''}`}>
+                                <div className="relative">
+                                    <img src={account.avatar} className="w-12 h-12 rounded-full object-cover bg-gray-200" />
+                                    <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-[#1c1c1d]"></div>
+                                </div>
+                                <div className="text-right flex-1 min-w-0">
+                                    <h3 className="font-bold text-gray-900 dark:text-white truncate">{account.name}</h3>
+                                    <p className="text-xs text-gray-500 truncate font-mono">{account.email}</p>
+                                </div>
+                                <ChevronRight size={20} className="text-gray-400 rotate-180" />
+                            </div>
+                        ))}
+                    </div>
 
-                <button onClick={() => setShowAccountChooser(false)} className="w-full mt-6 text-telegram-primary font-bold py-3 hover:bg-telegram-primary/5 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    <Plus size={20} />
-                    افزودن حساب کاربری
-                </button>
+                    <button onClick={() => setShowAccountChooser(false)} className="w-full mt-6 text-telegram-primary font-bold py-3 hover:bg-telegram-primary/5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        <Plus size={20} />
+                        افزودن حساب کاربری
+                    </button>
+                 </div>
              </div>
         </div>
       );
@@ -255,146 +259,148 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
 
   // Main Login/Signup Form (Telegram Style)
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-white dark:bg-[#1c1c1d] p-6 transition-colors duration-300">
+    <div className="h-[100dvh] w-full bg-white dark:bg-[#1c1c1d] transition-colors duration-300 overflow-y-auto">
+      <div className="min-h-full w-full flex flex-col items-center justify-center p-6 py-12">
       
-      <div className="w-full max-w-[380px] animate-fade-in flex flex-col items-center">
-          
-          {/* Logo Animation */}
-          <div className="w-36 h-36 mb-6">
-              {duckAnimation ? (
-                  <Lottie animationData={duckAnimation} loop={true} />
-              ) : (
-                  <div className="w-full h-full bg-telegram-primary/10 rounded-full flex items-center justify-center">
-                      <img src="https://cdn-icons-png.flaticon.com/512/2111/2111615.png" className="w-20 h-20" />
-                  </div>
-              )}
-          </div>
-
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-              {isLogin ? 'ورود به ایران‌گرام' : 'ثبت نام'}
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-8 px-4 leading-relaxed">
-              {isLogin ? 'لطفاً اطلاعات حساب کاربری خود را وارد کنید.' : 'برای شروع گفتگو، حساب کاربری جدید بسازید.'}
-          </p>
-
-          {/* Error/Success Messages */}
-          <AnimatePresence>
-            {error && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
-                    <AlertCircle size={18} className="shrink-0" />
-                    <span>{error}</span>
-                </motion.div>
-            )}
-            {successMsg && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
-                    <UserCheck size={18} className="shrink-0" />
-                    <span>{successMsg}</span>
-                </motion.div>
-            )}
-          </AnimatePresence>
-
-          <form onSubmit={handleSubmit} className="w-full space-y-5">
-              {!isLogin && (
-                  <div className="flex gap-4">
-                      <div className="relative group flex-1">
-                          <input 
-                            type="text" 
-                            id="name"
-                            className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all placeholder-transparent" 
-                            placeholder="Name" 
-                            value={formData.name} 
-                            onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                          />
-                          <label htmlFor="name" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
-                              نام
-                          </label>
+          <div className="w-full max-w-[380px] animate-fade-in flex flex-col items-center">
+              
+              {/* Logo Animation */}
+              <div className="w-36 h-36 mb-6">
+                  {duckAnimation ? (
+                      <Lottie animationData={duckAnimation} loop={true} />
+                  ) : (
+                      <div className="w-full h-full bg-telegram-primary/10 rounded-full flex items-center justify-center">
+                          <img src="https://cdn-icons-png.flaticon.com/512/2111/2111615.png" className="w-20 h-20" />
                       </div>
-                  </div>
-              )}
-
-              <div className="relative group">
-                  <input 
-                    type="email" 
-                    id="email"
-                    className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
-                    placeholder="Email" 
-                    value={formData.email} 
-                    onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                  />
-                  <label htmlFor="email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
-                      ایمیل
-                  </label>
+                  )}
               </div>
 
-              {!isLogin && (
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                  {isLogin ? 'ورود به ایران‌گرام' : 'ثبت نام'}
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-8 px-4 leading-relaxed">
+                  {isLogin ? 'لطفاً اطلاعات حساب کاربری خود را وارد کنید.' : 'برای شروع گفتگو، حساب کاربری جدید بسازید.'}
+              </p>
+
+              {/* Error/Success Messages */}
+              <AnimatePresence>
+                {error && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
+                        <AlertCircle size={18} className="shrink-0" />
+                        <span>{error}</span>
+                    </motion.div>
+                )}
+                {successMsg && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full mb-6 p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-xl flex items-center gap-2 text-right dir-rtl">
+                        <UserCheck size={18} className="shrink-0" />
+                        <span>{successMsg}</span>
+                    </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form onSubmit={handleSubmit} className="w-full space-y-5">
+                  {!isLogin && (
+                      <div className="flex gap-4">
+                          <div className="relative group flex-1">
+                              <input 
+                                type="text" 
+                                id="name"
+                                className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all placeholder-transparent" 
+                                placeholder="Name" 
+                                value={formData.name} 
+                                onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                              />
+                              <label htmlFor="name" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                                  نام
+                              </label>
+                          </div>
+                      </div>
+                  )}
+
                   <div className="relative group">
                       <input 
-                        type="tel" 
-                        id="phone"
+                        type="email" 
+                        id="email"
                         className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
-                        placeholder="Phone" 
-                        value={formData.phone} 
-                        onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                        placeholder="Email" 
+                        value={formData.email} 
+                        onChange={(e) => setFormData({...formData, email: e.target.value})} 
                       />
-                      <label htmlFor="phone" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
-                          موبایل
+                      <label htmlFor="email" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                          ایمیل
                       </label>
                   </div>
-              )}
 
-              <div className="relative group">
-                  <input 
-                    type="password" 
-                    id="password"
-                    className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
-                    placeholder="Password" 
-                    value={formData.password} 
-                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                  />
-                  <label htmlFor="password" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
-                      رمز عبور
-                  </label>
+                  {!isLogin && (
+                      <div className="relative group">
+                          <input 
+                            type="tel" 
+                            id="phone"
+                            className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                            placeholder="Phone" 
+                            value={formData.phone} 
+                            onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                          />
+                          <label htmlFor="phone" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                              موبایل
+                          </label>
+                      </div>
+                  )}
+
+                  <div className="relative group">
+                      <input 
+                        type="password" 
+                        id="password"
+                        className="peer w-full bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-telegram-primary focus:ring-2 focus:ring-telegram-primary/20 text-gray-900 dark:text-white transition-all dir-ltr text-right placeholder-transparent" 
+                        placeholder="Password" 
+                        value={formData.password} 
+                        onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                      />
+                      <label htmlFor="password" className="absolute right-4 top-[-10px] bg-white dark:bg-[#1c1c1d] px-1 text-xs text-telegram-primary transition-all peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-gray-400 peer-placeholder-shown:text-base peer-focus:top-[-10px] peer-focus:text-xs peer-focus:text-telegram-primary pointer-events-none">
+                          رمز عبور
+                      </label>
+                  </div>
+
+                  {isLogin && (
+                      <div className="flex justify-end">
+                          <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-telegram-primary font-medium hover:underline">فراموشی رمز عبور؟</button>
+                      </div>
+                  )}
+
+                  <button type="submit" disabled={loading} className="w-full bg-telegram-primary hover:opacity-90 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-telegram-primary/30 flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-wide text-sm">
+                      {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'شروع گفتگو' : 'ثبت نام')}
+                  </button>
+              </form>
+
+              {/* Social Logins */}
+              <div className="mt-8 w-full space-y-3">
+                  <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors text-sm">
+                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                      ورود با حساب گوگل
+                  </button>
+
+                  <button type="button" onClick={handleGuestLogin} disabled={loading} className="w-full bg-transparent hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
+                      <Eye size={18} />
+                      ورود مهمان
+                  </button>
               </div>
 
-              {isLogin && (
-                  <div className="flex justify-end">
-                      <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-telegram-primary font-medium hover:underline">فراموشی رمز عبور؟</button>
-                  </div>
+              {/* Toggle Login/Signup */}
+              <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="mt-8 text-telegram-primary text-sm font-bold hover:underline transition-all">
+                  {isLogin ? 'حساب کاربری ندارید؟ ثبت نام کنید' : 'حساب دارید؟ وارد شوید'}
+              </button>
+
+              {storedAccounts.length > 0 && (
+                  <button onClick={() => setShowAccountChooser(true)} className="mt-4 text-gray-400 text-xs flex items-center gap-1 hover:text-gray-600 transition-colors">
+                      <Users size={12} /> حساب‌های ذخیره شده
+                  </button>
               )}
-
-              <button type="submit" disabled={loading} className="w-full bg-telegram-primary hover:opacity-90 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-telegram-primary/30 flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-wide text-sm">
-                  {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'شروع گفتگو' : 'ثبت نام')}
-              </button>
-          </form>
-
-          {/* Social Logins */}
-          <div className="mt-8 w-full space-y-3">
-              <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-white font-medium py-3 rounded-xl flex items-center justify-center gap-3 transition-colors text-sm">
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                  ورود با حساب گوگل
-              </button>
-
-              <button type="button" onClick={handleGuestLogin} disabled={loading} className="w-full bg-transparent hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
-                  <Eye size={18} />
-                  ورود مهمان
-              </button>
           </div>
-
-          {/* Toggle Login/Signup */}
-          <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="mt-8 text-telegram-primary text-sm font-bold hover:underline transition-all">
-              {isLogin ? 'حساب کاربری ندارید؟ ثبت نام کنید' : 'حساب دارید؟ وارد شوید'}
-          </button>
-
-          {storedAccounts.length > 0 && (
-              <button onClick={() => setShowAccountChooser(true)} className="mt-4 text-gray-400 text-xs flex items-center gap-1 hover:text-gray-600 transition-colors">
-                  <Users size={12} /> حساب‌های ذخیره شده
-              </button>
-          )}
-      </div>
-      
-      {/* Footer */}
-      <div className="fixed bottom-4 text-center w-full text-[10px] text-gray-400">
-          Irangram for Web v{CONFIG.VERSION} • Designed by Mr.V
+          
+          {/* Footer - Now Static */}
+          <div className="mt-8 text-center w-full text-[10px] text-gray-400">
+              Irangram for Web v{CONFIG.VERSION} • Designed by Mr.V
+          </div>
       </div>
     </div>
   );
