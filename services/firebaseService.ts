@@ -33,7 +33,7 @@ import {
   signOut,
   type User
 } from "firebase/auth";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
 import { CONFIG } from "../config";
 
@@ -51,195 +51,67 @@ const sanitizeData = (data: any) => {
     return clean;
 };
 
-// --- AUTHENTICATION HELPERS (PROXY SUPPORT) ---
-
-const API_KEY = "AIzaSyAzZX5GMMO2DrZCDlOxRgiXQEt2IJ2Vkw8"; // From config
-const STORAGE_BUCKET = "irangram-onlinemessenger.firebasestorage.app";
-
-// Helper to get Auth URL (Proxy or Direct)
-const getAuthUrl = (endpoint: string) => {
-    const baseUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '') || '';
-    if (baseUrl) {
-        return `${baseUrl}/identitytoolkit/v1/accounts:${endpoint}?key=${API_KEY}`;
-    }
-    return `https://identitytoolkit.googleapis.com/v1/accounts:${endpoint}?key=${API_KEY}`;
-};
-
-// Helper to get Storage URL (Proxy or Direct)
-const getStorageUrl = (path: string) => {
-    const baseUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '') || '';
-    const encodedPath = encodeURIComponent(path);
-    if (baseUrl) {
-        // Route through proxy: /v0/b/[bucket]/o/[path]
-        return `${baseUrl}/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}`;
-    }
-    return `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}`;
-};
-
-// Manual User Storage for Proxy Mode
-const saveProxyUser = (userData: any) => {
-    localStorage.setItem('irangram_proxy_user', JSON.stringify(userData));
-};
-
-const getProxyUser = () => {
-    const data = localStorage.getItem('irangram_proxy_user');
-    return data ? JSON.parse(data) : null;
-};
-
-const clearProxyUser = () => {
-    localStorage.removeItem('irangram_proxy_user');
-};
-
-// Unified Get User (Checks SDK first, then LocalStorage)
+// Unified Get User
 export const getCurrentUser = () => {
-    if (auth?.currentUser) return auth.currentUser;
-    const proxy = getProxyUser();
-    if (proxy) return { uid: proxy.localId, email: proxy.email, displayName: proxy.displayName || 'User', photoURL: '' }; // Mocking Firebase User object
-    return null;
+    return auth?.currentUser || null;
 };
 
 export const subscribeToAuth = (callback: (user: any | null) => void) => {
-    // 1. IMMEDIATE PRIORITY: Check LocalStorage for Proxy User
-    // This bypasses the initial network check of the SDK which often fails in Iran.
-    const proxyUser = getProxyUser();
-    let hasReturnedProxyUser = false;
-
-    if (proxyUser) {
-        // Create a mock user object compatible with Firebase User
-        const mockUser = { uid: proxyUser.localId, email: proxyUser.email, displayName: proxyUser.displayName || 'User' };
-        callback(mockUser);
-        hasReturnedProxyUser = true;
-    }
-
     if (!auth) {
-        if (!hasReturnedProxyUser) callback(null);
+        callback(null);
         return () => {};
     }
-
-    // 2. Listen to real SDK
-    // If connection succeeds, this will trigger and might update the user state.
-    // If connection fails (blocked), we rely on the step 1 above.
     return onAuthStateChanged(auth, (user) => {
-        if (user) {
-            callback(user);
-        } else {
-            // SDK says no user (signed out or init state)
-            // If we haven't already returned the proxy user, do it now.
-            // But if we have a proxy user locally, stick with it unless explicitly signed out.
-            const stored = getProxyUser();
-            if (stored) {
-                callback({ uid: stored.localId, email: stored.email, displayName: stored.displayName || 'User' });
-            } else {
-                callback(null);
-            }
-        }
+        callback(user);
     });
 };
 
 export const registerUser = async (email: string, pass: string, name: string, phone: string) => {
-    // Try via Proxy REST API first (Bypasses Filter)
-    try {
-        const response = await fetch(getAuthUrl('signUp'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass, returnSecureToken: true })
+    if (!auth) throw new Error("Auth unavailable");
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await updateProfile(cred.user, { displayName: name });
+    
+    // Save profile to Firestore
+    if (db) {
+        let role: UserRole = 'user';
+        if (email === CONFIG.OWNER_EMAIL) role = 'owner';
+        else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
+
+        await setDoc(doc(db, "users", cred.user.uid), {
+            name: name,
+            email: email,
+            phone: phone,
+            username: email.split('@')[0],
+            bio: "کاربر جدید ایران‌گرام",
+            avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`,
+            role: role,
+            isBanned: false,
+            createdAt: serverTimestamp(),
+            lastSeen: serverTimestamp(),
+            status: 'online'
         });
-        
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error?.message || 'Registration failed');
-
-        // Save session locally
-        const userData = { ...data, displayName: name };
-        saveProxyUser(userData);
-
-        // Save profile to Firestore (using Proxy connection setup in config)
-        if (db) {
-            let role: UserRole = 'user';
-            if (email === CONFIG.OWNER_EMAIL) role = 'owner';
-            else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
-
-            // Fire and forget profile creation to avoid UI lag
-            setDoc(doc(db, "users", data.localId), {
-                name: name,
-                email: email,
-                phone: phone,
-                username: email.split('@')[0],
-                bio: "کاربر جدید ایران‌گرام",
-                avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`,
-                role: role,
-                isBanned: false,
-                createdAt: serverTimestamp(),
-                lastSeen: serverTimestamp(),
-                status: 'online'
-            }).catch(e => console.error("Profile creation sync warning:", e));
-        }
-        return { uid: data.localId, ...userData };
-
-    } catch (e) {
-        console.warn("Proxy registration failed, trying SDK...", e);
-        // Fallback to SDK (might fail without VPN)
-        if (!auth) throw new Error("Auth unavailable");
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await updateProfile(cred.user, { displayName: name });
-        // After SDK success, save proxy user to cache it for next reload
-        saveProxyUser({ 
-            localId: cred.user.uid, 
-            email: cred.user.email, 
-            displayName: name,
-            idToken: await cred.user.getIdToken() 
-        });
-        return cred.user;
     }
+    return cred.user;
 };
 
 export const loginUser = async (email: string, pass: string) => {
-    // Try via Proxy REST API first (Bypasses Filter)
-    try {
-        const response = await fetch(getAuthUrl('signInWithPassword'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass, returnSecureToken: true })
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error?.message || 'Login failed');
-
-        // Save session
-        saveProxyUser(data);
-
-        // Update status in DB
-        if (db) {
-            const userRef = doc(db, "users", data.localId);
-            const updates: any = { status: 'online', lastSeen: serverTimestamp() };
-            if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-            if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
-            setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update warning", e));
-        }
-        return { uid: data.localId, ...data };
-
-    } catch (e: any) {
-        console.warn("Proxy login failed, trying SDK...", e);
-        if (auth) {
-            const cred = await signInWithEmailAndPassword(auth, email, pass);
-            // Save proxy user for future caching
-             saveProxyUser({ 
-                localId: cred.user.uid, 
-                email: cred.user.email, 
-                displayName: cred.user.displayName,
-                idToken: await cred.user.getIdToken() 
-            });
-            return cred.user;
-        }
-        throw e;
+    if (!auth) throw new Error("Auth unavailable");
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    
+    // Update status in DB
+    if (db) {
+        const userRef = doc(db, "users", cred.user.uid);
+        const updates: any = { status: 'online', lastSeen: serverTimestamp() };
+        if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
+        if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
+        setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update warning", e));
     }
+    return cred.user;
 };
 
 export const loginWithGoogle = async (isLoginMode: boolean = false) => {
     if (!auth) throw new Error("سرویس احراز هویت در دسترس نیست.");
     const provider = new GoogleAuthProvider();
-    
-    // Google Sign-In requires redirection or popup to Google domains.
-    // This is hard to proxy fully without a backend.
     
     try {
         const result = await signInWithPopup(auth, provider);
@@ -284,8 +156,6 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
                 await setDoc(docRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
             }
         }
-        // Save to proxy storage for consistency if mixed usage
-        saveProxyUser({ localId: user.uid, email: user.email, displayName: user.displayName });
         return user;
     } catch (error) {
         console.error("Google Sign-In Error", error);
@@ -316,30 +186,14 @@ export const loginAnonymously = async () => {
             expiresAt: expiresAt
         });
     }
-    // Save to proxy storage
-    saveProxyUser({ localId: user.uid, email: '', displayName: 'کاربر مهمان' });
     return user;
 };
 
 export const sendPasswordReset = async (email: string) => {
-    // Try Proxy
-    try {
-        await fetch(getAuthUrl('sendOobCode'), {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ requestType: 'PASSWORD_RESET', email })
-        });
-    } catch(e) {
-        if (auth) await sendPasswordResetEmail(auth, email);
-    }
+    if (auth) await sendPasswordResetEmail(auth, email);
 };
 
 export const updateUserPassword = async (newPassword: string) => {
-    const user = getCurrentUser();
-    if (!user) throw new Error("No user logged in");
-    
-    // Note: Changing password via REST requires ID Token which we might need to refresh
-    // For simplicity, fallback to SDK or require re-login for security in proxy mode
     if (auth?.currentUser) {
         await updatePassword(auth.currentUser, newPassword);
     } else {
@@ -348,7 +202,6 @@ export const updateUserPassword = async (newPassword: string) => {
 };
 
 export const logoutUser = async (uid?: string) => {
-    clearProxyUser();
     if (!auth) return;
     if (uid && db) {
         try {
@@ -360,10 +213,6 @@ export const logoutUser = async (uid?: string) => {
     await signOut(auth);
 };
 
-// ... Rest of the file uses 'db', which is now configured to use the proxy host in firebaseConfig.ts
-// ... So the standard Firestore calls below will automatically route through Cloudflare.
-
-// Updated getUserProfile to use getCurrentUser() helper logic if needed, but db access is handled by config
 export const getUserProfile = async (uid: string): Promise<UserProfileData | null> => {
     if (!db) return null;
     try {
@@ -372,15 +221,15 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         if (docSnap.exists()) {
             return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
         } else {
-            const currentUser = getCurrentUser();
-            if (currentUser && currentUser.uid === uid) {
-                const email = currentUser.email;
-                if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') {
+            // Check if current user info is available (for system accounts)
+            if (auth?.currentUser?.uid === uid) {
+                 const currentUser = auth.currentUser;
+                 const email = currentUser.email;
+                 if (email === CONFIG.OWNER_EMAIL || email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') {
                      const role = email === CONFIG.OWNER_EMAIL ? 'owner' : 'developer';
-                     const name = email === CONFIG.OWNER_EMAIL ? 'مدیر سیستم' : 'توسعه‌دهنده سیستم';
                      const newProfile: UserProfileData = {
                         uid: currentUser.uid,
-                        name: currentUser.displayName || name,
+                        name: currentUser.displayName || 'System Admin',
                         email: email || '',
                         phone: '',
                         username: role,
@@ -392,19 +241,13 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
                         lastSeen: serverTimestamp(),
                         status: 'online'
                      };
-                     // Don't await this to keep UI fast
-                     const { uid: _, ...profileToSave } = newProfile;
-                     setDoc(docRef, profileToSave).catch(e => console.error("Auto-profile create warning:", e));
+                     setDoc(docRef, newProfile).catch(e => console.error("Auto-profile create warning:", e));
                      return newProfile;
-                }
+                 }
             }
         }
     } catch (e: any) {
-        if (e.code === 'unavailable' || e.message?.includes('offline')) {
-            console.warn("Client offline: getUserProfile failed gracefully.");
-        } else {
-            console.error("Error fetching profile", e);
-        }
+        console.error("Error fetching profile", e);
     }
     return null;
 };
@@ -693,96 +536,35 @@ export const subscribeToAllUsers = (callback: (users: Partial<UserProfileData>[]
 };
 
 // --- STORAGE ---
-// Custom upload using Proxy REST API to bypass filtering
 export const uploadMedia = async (file: File | Blob, path: string): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
-        // Try Proxy first
-        try {
-            const uploadUrl = getStorageUrl(path);
-            const response = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': file.type
-                },
-                body: file
-            });
+    if (!storage) throw new Error("Storage not available");
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
 
-            if (!response.ok) throw new Error('Upload failed via proxy');
-            
-            const data = await response.json();
-            // Construct download URL: https://firebasestorage.googleapis.com/v0/b/[bucket]/o/[name]?alt=media&token=[token]
-            const downloadToken = data.downloadTokens;
-            // We use the proxy for downloading too if needed, but often direct link with token works if not blocked.
-            // If blocked, we should route download via proxy too.
-            // Construct a direct link first. If user is in Iran without VPN, image loading might fail if it hits googleapis directly.
-            // The `getDownloadURL` from SDK returns a googleapis link.
-            
-            // Let's return a link that goes through our proxy? 
-            // Or just return the standard link and hope Cloudflare worker handles /v0/b/ requests if we use relative paths?
-            // React <img src> will make a GET request. If we use the standard URL, it's blocked.
-            // We should return a URL that points to our Worker.
-            
-            const workerUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '');
-            const bucket = "irangram-onlinemessenger.firebasestorage.app";
-            const encodedName = encodeURIComponent(path);
-            
-            // Worker URL to fetch image: https://worker.dev/v0/b/bucket/o/path?alt=media&token=...
-            const publicUrl = `${workerUrl}/v0/b/${bucket}/o/${encodedName}?alt=media&token=${downloadToken}`;
-            resolve(publicUrl);
-            return;
-
-        } catch (e) {
-            console.warn("Proxy upload failed, trying SDK fallback...", e);
-        }
-
-        // Fallback to SDK (will fail without VPN)
+export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgress: (progress: number) => void): Promise<string> => {
+    return new Promise((resolve, reject) => {
         if (!storage) {
             reject(new Error("Storage not available"));
             return;
         }
-        try {
-            const storageRef = ref(storage, path);
-            const snapshot = await uploadBytes(storageRef, file);
-            resolve(await getDownloadURL(snapshot.ref));
-        } catch (e) {
-            reject(e);
-        }
-    });
-};
+        const storageRef = ref(storage, path);
+        const uploadTask = uploadBytesResumable(storageRef, file);
 
-export const uploadMediaWithProgress = (file: File | Blob, path: string, onProgress: (progress: number) => void): Promise<string> => {
-    // XMLHttpRequest for progress support with Proxy
-    return new Promise((resolve, reject) => {
-        const uploadUrl = getStorageUrl(path);
-        const xhr = new XMLHttpRequest();
-        
-        xhr.open('POST', uploadUrl, true);
-        xhr.setRequestHeader('Content-Type', file.type);
-        
-        xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-                const percent = (e.loaded / e.total) * 100;
-                onProgress(percent);
+        uploadTask.on('state_changed', 
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                onProgress(progress);
+            }, 
+            (error) => {
+                reject(error);
+            }, 
+            async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                resolve(downloadURL);
             }
-        };
-        
-        xhr.onload = () => {
-            if (xhr.status === 200) {
-                const data = JSON.parse(xhr.responseText);
-                const downloadToken = data.downloadTokens;
-                const workerUrl = CONFIG.CLOUDFLARE_PROXY_URL?.replace(/\/$/, '');
-                const bucket = "irangram-onlinemessenger.firebasestorage.app";
-                const encodedName = encodeURIComponent(path);
-                const publicUrl = `${workerUrl}/v0/b/${bucket}/o/${encodedName}?alt=media&token=${downloadToken}`;
-                resolve(publicUrl);
-            } else {
-                // Fallback to SDK logic if proxy fails (not implemented here for simplicity/code size)
-                reject(new Error("Upload failed"));
-            }
-        };
-        
-        xhr.onerror = () => reject(new Error("Network error"));
-        xhr.send(file);
+        );
     });
 };
 
@@ -843,13 +625,12 @@ export const sendGlobalMessage = async (message: Partial<Message>, userProfile: 
         throw new Error("دیتابیس متصل نیست.");
     }
     
-    // Explicit check for user authentication (Using Helper for Proxy Compatibility)
-    const currentUser = getCurrentUser();
+    const currentUser = auth?.currentUser;
     if (!currentUser) throw new Error("کاربر احراز هویت نشده است.");
 
     let finalText = message.text || '';
     
-    // Filter words using cached list to prevent blocking
+    // Filter words
     if (finalText && message.type === 'text') {
         if (localBannedWords.length > 0) {
              localBannedWords.forEach(word => { 
@@ -918,17 +699,13 @@ export const subscribeToUserChats = (uid: string, callback: (chats: any[]) => vo
 export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
     if (!db) throw new Error("دیتابیس متصل نیست.");
     
-    const currentUser = getCurrentUser();
+    const currentUser = auth?.currentUser;
     // We prioritize auth.currentUser. If called by bot/admin spoofing, senderId might be in message.
     const senderUid = currentUser?.uid || message.senderId;
     
     if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
 
     const chatRef = doc(db, "chats", chatId);
-    
-    // Check if chatId is a group or DM
-    // If it's a DM, add both users to participants
-    // If it's 'saved', only add sender
     
     const chatUpdateData: any = { 
         updatedAt: serverTimestamp(), 
@@ -943,12 +720,6 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     } 
     // If it's a direct message (not a group ID we know)
     else {
-         // Logic: If receiverId matches an existing group ID, we don't add it as a participant.
-         // But here we assume receiverId is a User ID for DMs.
-         // The caller (App.tsx) handles Group IDs by passing the group ID as receiverId.
-         // Groups don't need 'participants' array update on every message usually, but DMs do to create the session.
-         
-         // We can safely add both IDs. Firestore arrayUnion ignores duplicates.
          chatUpdateData.participants = arrayUnion(senderUid, receiverId);
     }
 

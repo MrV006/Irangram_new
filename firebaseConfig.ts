@@ -30,32 +30,12 @@ let analytics: any = null;
 try {
     app = initializeApp(firebaseConfig);
     
-    // --- PROXY CONFIGURATION FOR FIRESTORE ---
-    // If a proxy URL is set in config, parse the hostname and use it for Firestore.
-    // This allows database traffic to route through Cloudflare.
-    let firestoreSettings: any = {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-    };
-
-    if (CONFIG.CLOUDFLARE_PROXY_URL && CONFIG.CLOUDFLARE_PROXY_URL.startsWith('http')) {
-        try {
-            const proxyUrl = new URL(CONFIG.CLOUDFLARE_PROXY_URL);
-            firestoreSettings = {
-                ...firestoreSettings,
-                host: proxyUrl.host,
-                ssl: true,
-                experimentalForceLongPolling: true, // ENABLING LONG POLLING FOR STABILITY
-                ignoreUndefinedProperties: true
-            };
-            console.log("Using Firestore Proxy:", proxyUrl.host);
-        } catch (e) {
-            console.error("Invalid Proxy URL in config", e);
-        }
-    }
-
+    // Direct Firestore Connection
     try {
-        db = initializeFirestore(app, firestoreSettings);
-        console.log("Firestore initialized with settings");
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+        console.log("Firestore initialized (Direct Mode)");
     } catch (e) {
         console.warn("Firestore init failed, falling back to default", e);
         db = getFirestore(app);

@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Camera, Check, User, Info, Phone, AtSign, Image as ImageIcon, Loader2, Trash2, AlertTriangle, Lock, Key, Globe, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, Camera, Check, User, Info, Phone, AtSign, Image as ImageIcon, Loader2, Trash2, AlertTriangle, Lock, Key } from 'lucide-react';
 import { UserProfileData } from '../types';
 import { uploadMedia, requestAccountDeletion, updateUserPassword } from '../services/firebaseService';
-import { CONFIG } from '../config';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -26,12 +25,9 @@ const WALLPAPER_PRESETS = [
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProfile, onSave, wallpaper, onSaveWallpaper }) => {
   const [formData, setFormData] = useState<UserProfileData>(userProfile);
-  const [activeTab, setActiveTab] = useState<'profile' | 'chat' | 'security' | 'network'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'chat' | 'security'>('profile');
   const [tempWallpaper, setTempWallpaper] = useState(wallpaper);
   const [customUrl, setCustomUrl] = useState('');
-  
-  // Proxy State
-  const [proxyUrl, setProxyUrl] = useState(CONFIG.CLOUDFLARE_PROXY_URL);
   
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,24 +46,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
   useEffect(() => {
     setFormData(userProfile);
     setTempWallpaper(wallpaper);
-    setProxyUrl(CONFIG.CLOUDFLARE_PROXY_URL);
   }, [userProfile, wallpaper, isOpen]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    // Save Proxy
-    const currentProxy = localStorage.getItem('irangram_proxy_url');
-    if (proxyUrl !== currentProxy && proxyUrl !== CONFIG.CLOUDFLARE_PROXY_URL) {
-        if(confirm("برای اعمال تغییرات پراکسی، برنامه باید مجدداً بارگذاری شود. ادامه می‌دهید؟")) {
-             localStorage.setItem('irangram_proxy_url', proxyUrl);
-             window.location.reload();
-             return;
-        }
-    } else {
-        localStorage.setItem('irangram_proxy_url', proxyUrl);
-    }
-
     onSave(formData);
     onSaveWallpaper(tempWallpaper);
     onClose();
@@ -180,15 +163,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                     <div className="flex items-center justify-center gap-2">
                         <ImageIcon size={18} />
                         ظاهر
-                    </div>
-                </button>
-                <button 
-                    onClick={() => setActiveTab('network')}
-                    className={`flex-1 min-w-[80px] pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'network' ? 'border-telegram-primary text-telegram-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-                >
-                    <div className="flex items-center justify-center gap-2">
-                        <Globe size={18} />
-                        اتصال
                     </div>
                 </button>
                 {!isGuest && (
@@ -413,46 +387,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, userProf
                             </button>
                         </div>
                      </div>
-                </div>
-            ) : activeTab === 'network' ? (
-                <div className="p-6 space-y-6">
-                    <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-                        <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300 font-bold mb-2">
-                            <ShieldCheck size={20} />
-                            <span>تنظیمات پراکسی (Proxy)</span>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
-                            اگر در اتصال به برنامه مشکل دارید، می‌توانید از آدرس پراکسی اختصاصی خود (Cloudflare Worker) استفاده کنید.
-                        </p>
-                        
-                        <div className="relative group">
-                            <Globe className="absolute right-3 top-3 text-gray-400" size={20} />
-                            <input 
-                                type="text" 
-                                value={proxyUrl} 
-                                onChange={(e) => setProxyUrl(e.target.value)} 
-                                placeholder="https://your-worker.workers.dev"
-                                className="w-full bg-white dark:bg-black/20 border border-gray-300 dark:border-gray-600 focus:border-telegram-primary rounded-xl py-3 pr-10 pl-4 outline-none transition-all text-gray-900 dark:text-white dir-ltr text-left"
-                            />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                            نکته: پس از ذخیره، برنامه به صورت خودکار ریلود می‌شود.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/5 rounded-xl">
-                        <span className="text-sm font-medium">وضعیت اتصال:</span>
-                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm font-bold">
-                            <Check size={16} /> متصل
-                        </span>
-                    </div>
-
-                    <button 
-                        onClick={() => window.location.reload()}
-                        className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600"
-                    >
-                        <RefreshCw size={16} /> تست اتصال مجدد
-                    </button>
                 </div>
             ) : (
                 <div className="p-6 space-y-6">
