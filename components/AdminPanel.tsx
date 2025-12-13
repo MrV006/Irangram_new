@@ -1,9 +1,11 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon, Calendar, Info, Smartphone, CameraOff, PenTool } from 'lucide-react';
-import { getAllUsers, updateUserRole, toggleUserBan, suspendUser, sendSystemNotification, getWordFilters, updateWordFilters, subscribeToReports, handleReport, deleteReport, getAdminSpyChats, getAdminSpyMessages, subscribeToAppeals, resolveAppeal, deleteAppeal, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, triggerSystemUpdate, wipeSystemData, deleteUserAccount, subscribeToDeletionRequests, resolveDeletionRequest, adminSendMessageAsUser, getAllGroups, forceJoinGroup, deleteChat, toggleUserMaintenance, setGlobalMaintenance, subscribeToSystemInfo, toggleUserScreenshotRestriction, setGlobalScreenshotRestriction, updateUserSystemPermissions } from '../services/firebaseService';
+import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon, Calendar, Info, Smartphone, CameraOff, PenTool, Reply, Edit2 } from 'lucide-react';
+import { getAllUsers, updateUserRole, toggleUserBan, suspendUser, sendSystemNotification, getWordFilters, updateWordFilters, subscribeToReports, handleReport, deleteReport, getAdminSpyChats, getAdminSpyMessages, subscribeToAppeals, resolveAppeal, deleteAppeal, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, triggerSystemUpdate, wipeSystemData, deleteUserAccount, subscribeToDeletionRequests, resolveDeletionRequest, adminSendMessageAsUser, getAllGroups, forceJoinGroup, deleteChat, toggleUserMaintenance, setGlobalMaintenance, subscribeToSystemInfo, toggleUserScreenshotRestriction, setGlobalScreenshotRestriction, updateUserSystemPermissions, adminEditUserMessage } from '../services/firebaseService';
 import { UserProfileData, UserRole, Message, Report, Contact, Appeal, DeletionRequest, SystemPermissions } from '../types';
 import { CONFIG } from '../config';
+import MessageBubble from './MessageBubble';
+import ImageModal from './ImageModal';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -46,7 +48,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
   const [activeSpyChat, setActiveSpyChat] = useState<string | null>(null);
   const [spyMessages, setSpyMessages] = useState<Message[]>([]);
   const [spyImpersonateText, setSpyImpersonateText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, message: Message, isMe: boolean } | null>(null);
+  const [viewingImageId, setViewingImageId] = useState<string | null>(null);
   const spyMessagesEndRef = useRef<HTMLDivElement>(null);
+  const spyInputRef = useRef<HTMLInputElement>(null);
 
   // Notification Modal state
   const [notifModal, setNotifModal] = useState<{ isOpen: boolean; targetUid: string | null; targetName: string }>({ isOpen: false, targetUid: null, targetName: '' });
@@ -319,16 +326,69 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
       }
   };
 
-  // --- Spy Mode ---
+  // --- Spy Mode & Message Management ---
   const handleSendAsUser = async () => {
       if (!activeSpyChat || !spyModal.targetUid || !spyImpersonateText.trim()) return;
-      await adminSendMessageAsUser(activeSpyChat, spyModal.targetUid, spyImpersonateText);
+      
+      if (editingMessage) {
+          await adminEditUserMessage(activeSpyChat, editingMessage.id, spyImpersonateText);
+          setEditingMessage(null);
+      } else {
+          await adminSendMessageAsUser(activeSpyChat, spyModal.targetUid, spyImpersonateText, replyingTo?.id);
+      }
+      
       setSpyImpersonateText('');
-      // Give firebase a moment to process the timestamp
+      setReplyingTo(null);
+      
+      // Update UI manually for instant feedback
       setTimeout(() => {
           getAdminSpyMessages(spyModal.targetUid!, activeSpyChat).then(setSpyMessages);
       }, 500);
   };
+
+  const handleDeleteSpyMessage = async () => {
+      if (!contextMenu || !activeSpyChat) return;
+      if (!confirm("آیا از حذف این پیام مطمئن هستید؟")) return;
+      
+      if (activeSpyChat === 'global_chat') {
+          await deleteMessageGlobal(contextMenu.message.id);
+      } else {
+          await deletePrivateMessage(activeSpyChat, contextMenu.message.id);
+      }
+      setContextMenu(null);
+      // Refresh
+      getAdminSpyMessages(spyModal.targetUid!, activeSpyChat).then(setSpyMessages);
+  };
+
+  const handleReplySpyMessage = () => {
+      if(contextMenu) {
+          setReplyingTo(contextMenu.message);
+          setContextMenu(null);
+          spyInputRef.current?.focus();
+      }
+  };
+
+  const handleEditSpyMessage = () => {
+      if(contextMenu && contextMenu.message.type === 'text') {
+          setEditingMessage(contextMenu.message);
+          setSpyImpersonateText(contextMenu.message.text);
+          setContextMenu(null);
+          spyInputRef.current?.focus();
+      }
+  };
+
+  const handleCopySpyMessage = () => {
+      if(contextMenu?.message.text) {
+          navigator.clipboard.writeText(contextMenu.message.text);
+          setContextMenu(null);
+      }
+  };
+
+  // --- Derived State for Gallery in Spy Mode ---
+  const chatImages = spyMessages
+      .filter(m => m.type === 'image' && m.imageUrl)
+      .map(m => ({ url: m.imageUrl!, id: m.id }))
+      .reverse();
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in font-sans">
@@ -648,27 +708,69 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                          <div className="flex-1 flex flex-col bg-white dark:bg-black/20 relative">
                              {activeSpyChat ? (
                                  <>
-                                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-                                        {spyMessages.map(msg => (
-                                            <div key={msg.id} className={`max-w-[80%] p-3 rounded-xl border shadow-sm text-sm ${msg.senderId === spyModal.targetUid ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 self-end rounded-tr-none' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 self-start rounded-tl-none'}`}>
-                                                <div className="text-[10px] font-bold text-purple-600 mb-1 opacity-70">{msg.senderName} ({new Date(msg.timestamp).toLocaleTimeString()})</div>
-                                                <div className="text-gray-800 dark:text-gray-200">{msg.text}</div>
-                                            </div>
-                                        ))}
+                                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-0.5">
+                                        {spyMessages.map((msg, index) => {
+                                            const isMe = msg.senderId === spyModal.targetUid;
+                                            
+                                            // Grouping Logic (Simplified for Spy Mode)
+                                            const prevMsg = spyMessages[index - 1];
+                                            const nextMsg = spyMessages[index + 1];
+                                            const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
+                                            const isLastInGroup = !nextMsg || nextMsg.senderId !== msg.senderId;
+                                            
+                                            return (
+                                                <MessageBubble 
+                                                    key={msg.id}
+                                                    message={msg}
+                                                    isMe={isMe}
+                                                    isFirstInGroup={isFirstInGroup}
+                                                    isLastInGroup={isLastInGroup}
+                                                    isMiddleInGroup={!isFirstInGroup && !isLastInGroup}
+                                                    showAvatar={!isMe && isLastInGroup}
+                                                    showSenderName={!isMe && isFirstInGroup}
+                                                    onReply={() => { setReplyingTo(msg); spyInputRef.current?.focus(); }}
+                                                    onContextMenu={(e, m, i) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, message: m, isMe: i }); }}
+                                                    onMediaClick={(url, id) => setViewingImageId(id)}
+                                                    onPlayAudio={() => {}} // Simple fallback
+                                                    isPlayingAudio={false}
+                                                    audioProgress={0}
+                                                    repliedMessage={msg.replyToId ? spyMessages.find(m => m.id === msg.replyToId) : null}
+                                                    isSelectionMode={false}
+                                                    isSelected={false}
+                                                    onToggleSelect={() => {}}
+                                                    onJumpToMessage={() => {}}
+                                                />
+                                            );
+                                        })}
                                         <div ref={spyMessagesEndRef} />
                                      </div>
-                                     <div className="p-3 bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 flex gap-2">
-                                         <input 
-                                            type="text" 
-                                            value={spyImpersonateText} 
-                                            onChange={(e) => setSpyImpersonateText(e.target.value)} 
-                                            placeholder={`ارسال پیام به عنوان ${spyModal.targetName}...`}
-                                            className="flex-1 p-3 rounded-xl border dark:border-gray-600 bg-white dark:bg-black/20 focus:ring-2 ring-purple-500 outline-none"
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSendAsUser()}
-                                         />
-                                         <button onClick={handleSendAsUser} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-lg shadow-purple-500/30">
-                                             <Send size={18} /> ارسال
-                                         </button>
+
+                                     {/* Input Area */}
+                                     <div className="p-3 bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 flex flex-col gap-2 relative">
+                                         {replyingTo && (
+                                             <div className="flex justify-between items-center bg-white dark:bg-gray-700 p-2 rounded-lg text-xs border-l-4 border-purple-500 mb-1">
+                                                 <div>
+                                                     <div className="font-bold text-purple-600">پاسخ به {replyingTo.senderName || 'پیام'}</div>
+                                                     <div className="truncate opacity-70 max-w-[200px]">{replyingTo.text || 'رسانه'}</div>
+                                                 </div>
+                                                 <button onClick={() => setReplyingTo(null)}><X size={14}/></button>
+                                             </div>
+                                         )}
+                                         <div className="flex gap-2 items-center">
+                                             <input 
+                                                ref={spyInputRef}
+                                                type="text" 
+                                                value={spyImpersonateText} 
+                                                onChange={(e) => setSpyImpersonateText(e.target.value)} 
+                                                placeholder={editingMessage ? "ویرایش پیام..." : `ارسال پیام به عنوان ${spyModal.targetName}...`}
+                                                className="flex-1 p-3 rounded-xl border dark:border-gray-600 bg-white dark:bg-black/20 focus:ring-2 ring-purple-500 outline-none"
+                                                onKeyDown={(e) => e.key === 'Enter' && handleSendAsUser()}
+                                             />
+                                             <button onClick={handleSendAsUser} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-lg shadow-purple-500/30">
+                                                 {editingMessage ? <Edit2 size={18} /> : <Send size={18} />} 
+                                                 {editingMessage ? 'ذخیره' : 'ارسال'}
+                                             </button>
+                                         </div>
                                      </div>
                                  </>
                              ) : (
@@ -680,6 +782,41 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                          </div>
                      </div>
                  </div>
+                 
+                 {/* Spy Context Menu */}
+                 {contextMenu && (
+                    <>
+                        <div className="fixed inset-0 z-[120]" onClick={() => setContextMenu(null)}></div>
+                        <div 
+                            className="fixed z-[121] bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-700 py-1 w-48 animate-fade-in"
+                            style={{ top: Math.min(contextMenu.y, window.innerHeight - 200), left: Math.min(contextMenu.x, window.innerWidth - 200) }}
+                        >
+                            <button onClick={handleReplySpyMessage} className="w-full text-right px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                                <Reply size={16} /> پاسخ
+                            </button>
+                            <button onClick={handleCopySpyMessage} className="w-full text-right px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                                <Copy size={16} /> کپی
+                            </button>
+                            {contextMenu.isMe && contextMenu.message.type === 'text' && (
+                                <button onClick={handleEditSpyMessage} className="w-full text-right px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                                    <Edit2 size={16} /> ویرایش
+                                </button>
+                            )}
+                            <button onClick={handleDeleteSpyMessage} className="w-full text-right px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-2 text-sm">
+                                <Trash2 size={16} /> حذف
+                            </button>
+                        </div>
+                    </>
+                 )}
+
+                 {/* Gallery Modal for Spy */}
+                 {viewingImageId && chatImages.length > 0 && (
+                    <ImageModal 
+                        images={chatImages} 
+                        initialImageId={viewingImageId} 
+                        onClose={() => setViewingImageId(null)} 
+                    />
+                 )}
              </div>
         )}
 
