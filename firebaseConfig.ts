@@ -8,7 +8,7 @@ import { getAnalytics } from "firebase/analytics";
 import { CONFIG } from "./config";
 
 // ------------------------------------------------------------------
-// تنظیمات پروژه جدید (irangram-onlinemessenger)
+// تنظیمات پروژه (irangram-onlinemessenger)
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyAzZX5GMMO2DrZCDlOxRgiXQEt2IJ2Vkw8",
@@ -30,12 +30,14 @@ let analytics: any = null;
 try {
     app = initializeApp(firebaseConfig);
     
-    // Direct Firestore Connection
+    // Direct Firestore Connection with Long Polling enforced for better connectivity in restricted networks
     try {
         db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+            experimentalForceLongPolling: true, // Critical fix for Iran/Restrictive Networks
+            ignoreUndefinedProperties: true
         });
-        console.log("Firestore initialized (Direct Mode)");
+        console.log("Firestore initialized (Long Polling Mode)");
     } catch (e) {
         console.warn("Firestore init failed, falling back to default", e);
         db = getFirestore(app);

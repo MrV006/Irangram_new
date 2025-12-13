@@ -5,15 +5,15 @@
  */
 
 export const CONFIG = {
-  // Toggle this to switch between Local Mock and Real Server (Keep false for Firebase)
-  USE_REAL_SERVER: false, 
+  // Toggle this to switch between Local Mock and Real Server
+  USE_REAL_SERVER: true, 
 
   // Direct connection - No Proxy
   CLOUDFLARE_PROXY_URL: '',
 
   // App Info
   APP_NAME: 'ایران‌گرام',
-  VERSION: '2.1.0',
+  VERSION: '2.2.0',
   
   // SUPER ADMIN EMAILS
   OWNER_EMAIL: 'amirrezaveisi45@gmail.com',
