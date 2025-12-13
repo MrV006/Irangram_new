@@ -1,8 +1,9 @@
 
+
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { motion, PanInfo, useAnimation } from 'framer-motion';
 import { Message, UserRole } from '../types';
-import { Check, CheckCheck, Play, Pause, FileText, Download, CornerUpRight, Reply, Share, Copy, Trash2, Pin, BarChart2, Shield, Crown, Code, X, Circle, CheckCircle } from 'lucide-react';
+import { Check, CheckCheck, Play, Pause, FileText, Download, CornerUpRight, Reply, Share, Copy, Trash2, Pin, BarChart2, Shield, Crown, Code, X, Circle, CheckCircle, Zap } from 'lucide-react';
 import { castPollVote } from '../services/firebaseService';
 import VideoPlayer from './VideoPlayer';
 // @ts-ignore
@@ -69,6 +70,32 @@ const Waveform: React.FC<{ progress: number; isPlaying: boolean; id: string; isM
                 );
             })}
         </div>
+    );
+};
+
+const RoleBadge: React.FC<{ role?: UserRole }> = ({ role }) => {
+    if (!role || role === 'user' || role === 'guest') return null;
+
+    let icon = <Shield size={10} />;
+    let text = 'ادمین';
+    let bgClass = 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+
+    if (role === 'owner') {
+        icon = <Crown size={10} fill="currentColor" />;
+        text = 'مدیر کل';
+        bgClass = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700';
+    } else if (role === 'developer') {
+        icon = <Code size={10} />;
+        text = 'برنامه‌نویس';
+        bgClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-700';
+    } else if (role === 'admin') {
+        bgClass = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-700';
+    }
+
+    return (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ml-2 align-middle ${bgClass}`}>
+            {icon} {text}
+        </span>
     );
 };
 
@@ -155,7 +182,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
     const handleDragEnd = async (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         setIsDragging(false);
-        if (isSelectionMode) return; // Disable swipe reply in selection mode
+        if (isSelectionMode) return;
         if (info.offset.x < -50) {
             onReply(message);
         }
@@ -170,19 +197,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         }
     };
 
-    // --- Telegram Bubble Logic ---
+    // --- Correct RTL Logic ---
+    // In RTL, "Me" is typically on the Right side (visually start). "Other" is on the Left side (visually end).
+    // Telegram Style in RTL:
+    // Me (Right side):
+    //   - Left corners always rounded.
+    //   - Right corners depend on grouping (First: Top-Right rounded, Bottom-Right sharp-ish; Last: Top-Right sharp-ish, Bottom-Right rounded; etc).
+    // Let's implement Telegram-like bubble shapes.
+    
     let borderRadiusClass = '';
     
     if (isMe) {
-        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-sm';
-        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-md';
-        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-md rounded-br-sm';
-        else borderRadiusClass = 'rounded-2xl rounded-r-md';
+        // Me (Right)
+        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-md rounded-br-md'; // Standalone
+        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-2xl rounded-br-sm'; // First
+        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-2xl'; // Last
+        else borderRadiusClass = 'rounded-2xl rounded-tr-sm rounded-br-sm'; // Middle
     } else {
-        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-sm';
-        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-sm rounded-bl-md';
-        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-md rounded-bl-sm';
-        else borderRadiusClass = 'rounded-2xl rounded-l-md';
+        // Other (Left)
+        if (isFirstInGroup && isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-md rounded-bl-md';
+        else if (isFirstInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-2xl rounded-bl-sm';
+        else if (isLastInGroup) borderRadiusClass = 'rounded-2xl rounded-tl-sm rounded-bl-2xl';
+        else borderRadiusClass = 'rounded-2xl rounded-tl-sm rounded-bl-sm';
     }
 
     const isTransparent = message.type === 'sticker' || message.type === 'video_note';
@@ -190,23 +226,26 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     let bubbleBg = '';
     if (!isTransparent) {
         bubbleBg = isMe 
-            ? 'bg-telegram-chatOut dark:bg-telegram-chatOutDark shadow-message' 
-            : 'bg-white dark:bg-telegram-chatInDark shadow-message';
+            ? 'bg-telegram-chatOut dark:bg-telegram-chatOutDark shadow-sm' 
+            : 'bg-white dark:bg-telegram-chatInDark shadow-sm';
     }
 
-    const paddingClass = isTransparent ? 'p-0' : 'px-2.5 py-1.5';
+    const paddingClass = isTransparent ? 'p-0' : 'px-3 py-2';
     const timeString = new Date(message.timestamp).toLocaleTimeString('fa-IR', {hour:'2-digit', minute:'2-digit'});
+
+    // Alignment: Me = Right (justify-start in RTL context), Other = Left (justify-end in RTL context)
+    const alignmentClass = isMe ? 'justify-start' : 'justify-end';
 
     return (
         <div 
             id={`msg-${message.id}`} 
             onClick={handleBubbleClick}
-            className={`flex w-full mb-1 relative group/msg transition-colors ${isSelectionMode ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 py-1 -my-1' : ''} ${isMe ? 'justify-end' : 'justify-start'}`}
+            className={`flex w-full mb-1 relative group/msg transition-colors ${isSelectionMode ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 py-1 -my-1' : ''} ${alignmentClass}`}
         >
-             {/* Selection Overlay Background */}
-             {isSelected && <div className="absolute inset-0 bg-telegram-primary/10 dark:bg-telegram-primary/20 z-0"></div>}
+             {/* Selection Overlay */}
+             {isSelected && <div className="absolute inset-0 bg-telegram-primary/10 dark:bg-telegram-primary/20 z-0 rounded"></div>}
 
-             {/* Selection Checkbox (Left side for all messages) */}
+             {/* Checkbox for Selection */}
              {isSelectionMode && (
                  <div className="flex items-center justify-center pl-2 pr-2 z-20 shrink-0 cursor-pointer" onClick={() => onToggleSelect(message.id)}>
                      {isSelected ? (
@@ -219,13 +258,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                  </div>
              )}
 
-             {/* Swipe Reply Indicator */}
-             {!isSelectionMode && (
-                 <div className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm z-0 transition-opacity ${isMe ? 'right-4' : 'left-4'}`}>
-                     <Reply size={16} className="text-gray-500 dark:text-gray-300" />
-                 </div>
-             )}
-
              <motion.div
                 drag={isSelectionMode ? false : "x"}
                 dragConstraints={{ left: -80, right: 0 }}
@@ -233,12 +265,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 onDragStart={() => setIsDragging(true)}
                 onDragEnd={handleDragEnd}
                 animate={controls}
-                className={`relative z-10 flex max-w-[85%] sm:max-w-[75%] flex-row items-end gap-2 animate-pop ${isSelected ? 'translate-x-0' : ''}`} // Reset transform if selected
+                className={`relative z-10 flex max-w-[85%] sm:max-w-[75%] flex-row items-end gap-2 animate-pop ${isSelected ? 'translate-x-0' : ''}`}
                 onContextMenu={(e) => { if (!isSelectionMode) onContextMenu(e, message, isMe); }}
              >
-                {/* Avatar (Left) */}
+                {/* Avatar (For Others - Visual End in RTL is Left) */}
                 {!isMe && !isSelectionMode && (
-                    <div className="w-8 shrink-0 flex flex-col justify-end pb-1">
+                    <div className="w-8 shrink-0 flex flex-col justify-end pb-1 order-last">
                         {showAvatar ? (
                             <img src={message.senderAvatar} className="w-8 h-8 rounded-full bg-gray-200 object-cover cursor-pointer hover:opacity-90" />
                         ) : (
@@ -252,21 +284,22 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     ${paddingClass} text-[15px] leading-relaxed break-words min-w-[4.5rem] relative transition-all overflow-hidden
                     ${!isTransparent && borderRadiusClass} ${bubbleBg}
                 `}>
-                    {/* Sender Name */}
+                    {/* Sender Name & Role */}
                     {(!isTransparent) && showSenderName && !isMe && (
-                        <div className={`text-xs font-bold mb-1 text-telegram-primary cursor-pointer hover:underline truncate max-w-[200px]`}>
+                        <div className={`text-xs font-bold mb-1 text-telegram-primary cursor-pointer hover:underline truncate max-w-[200px] flex items-center`}>
                             {message.senderName}
+                            <RoleBadge role={message.senderRole} />
                         </div>
                     )}
 
-                    {/* Reply Context - Click to Jump */}
+                    {/* Reply Context */}
                     {message.replyToId && (
                         <div 
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if(!isSelectionMode && message.replyToId) onJumpToMessage(message.replyToId);
                             }}
-                            className={`mb-1 pl-2 border-l-[3px] ${isMe ? 'border-green-600/50 dark:border-white/50' : 'border-telegram-primary/50'} text-xs cursor-pointer rounded-r py-0.5 relative overflow-hidden hover:bg-black/5 dark:hover:bg-white/5 transition-colors`}
+                            className={`mb-1 pl-2 border-r-[3px] ${isMe ? 'border-green-600/50 dark:border-white/50' : 'border-telegram-primary/50'} text-xs cursor-pointer rounded-l py-0.5 relative overflow-hidden hover:bg-black/5 dark:hover:bg-white/5 transition-colors pr-2`}
                         >
                              <span className={`font-bold block truncate ${isMe ? 'text-green-800 dark:text-white' : 'text-telegram-primary'}`}>{repliedMessage?.senderName || 'پیام'}</span>
                              <span className="opacity-70 truncate block max-w-[200px]">{repliedMessage?.text || (repliedMessage?.type === 'video_note' ? 'پیام ویدیویی' : (repliedMessage ? 'رسانه' : 'پیام حذف شده'))}</span>
@@ -369,16 +402,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                         )}
 
                         {!message.isSticker && message.type === 'text' && (
-                            <p className="whitespace-pre-wrap text-start leading-snug break-words" dir="auto" style={{ wordBreak: 'break-word' }}>
+                            <p className="whitespace-pre-wrap text-right leading-snug break-words font-sans" dir="auto" style={{ wordBreak: 'break-word', textAlign: 'right' }}>
                                 {message.text}
-                                <span className="inline-block w-12"></span> 
                             </p>
                         )}
                         
                         {/* Timestamp & Status */}
                         {!isTransparent && (
-                            <div className={`float-right flex items-center gap-0.5 select-none text-[10px] -mt-3.5 ml-0 ${isMe ? 'text-green-900/60 dark:text-white/60' : 'text-gray-500/80 dark:text-gray-400'}`}>
-                                {message.edited && <span className="mr-1">edited</span>}
+                            <div className={`flex items-center justify-end gap-1 select-none text-[10px] mt-1 ${isMe ? 'text-green-900/60 dark:text-white/60' : 'text-gray-500/80 dark:text-gray-400'}`}>
+                                {message.edited && <span className="mr-1">ویرایش</span>}
                                 <span className="font-sans">{timeString}</span>
                                 {isMe && (
                                     <span className={`${message.status === 'read' ? 'text-green-800 dark:text-blue-200' : ''}`}>

@@ -37,10 +37,8 @@ import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions, ChatFolder } from "../types";
 import { CONFIG } from "../config";
 
-// Local Cache for critical data
 let localBannedWords: string[] = [];
 
-// Helper to remove undefined values
 const sanitizeData = (data: any) => {
     const clean: any = {};
     Object.keys(data).forEach(key => {
@@ -51,7 +49,6 @@ const sanitizeData = (data: any) => {
     return clean;
 };
 
-// Unified Get User
 export const getCurrentUser = () => {
     return auth?.currentUser || null;
 };
@@ -71,7 +68,6 @@ export const registerUser = async (email: string, pass: string, name: string, ph
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     await updateProfile(cred.user, { displayName: name });
     
-    // Save profile to Firestore
     if (db) {
         let role: UserRole = 'user';
         if (email === CONFIG.OWNER_EMAIL) role = 'owner';
@@ -98,12 +94,9 @@ export const loginUser = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth unavailable");
     const cred = await signInWithEmailAndPassword(auth, email, pass);
     
-    // Update status in DB
     if (db) {
         const userRef = doc(db, "users", cred.user.uid);
         const updates: any = { status: 'online', lastSeen: serverTimestamp() };
-        if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-        if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
         setDoc(userRef, updates, { merge: true }).catch(e => console.log("Status update warning", e));
     }
     return cred.user;
@@ -151,9 +144,7 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
                 });
             } else {
                  const updates: any = { status: 'online', lastSeen: serverTimestamp() };
-                if (email === CONFIG.OWNER_EMAIL) updates.role = 'owner';
-                if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') updates.role = 'developer';
-                await setDoc(docRef, updates, { merge: true }).catch(e => console.log("Status update error", e));
+                await setDoc(docRef, updates, { merge: true });
             }
         }
         return user;
@@ -168,9 +159,8 @@ export const loginAnonymously = async () => {
     const userCredential = await signInAnonymously(auth);
     const user = userCredential.user;
     
-    // Create a temporary guest profile
     if (db) {
-        const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
+        const expiresAt = Date.now() + (24 * 60 * 60 * 1000); 
         await setDoc(doc(db, "users", user.uid), {
             name: 'کاربر مهمان',
             email: '',
@@ -221,7 +211,6 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
         if (docSnap.exists()) {
             return { uid: docSnap.id, ...docSnap.data() } as UserProfileData;
         } else {
-            // Check if current user info is available (for system accounts)
             if (auth?.currentUser?.uid === uid) {
                  const currentUser = auth.currentUser;
                  const email = currentUser.email;
@@ -252,7 +241,136 @@ export const getUserProfile = async (uid: string): Promise<UserProfileData | nul
     return null;
 };
 
-// --- CHAT FOLDERS ---
+// --- CHAT FUNCTIONS ---
+
+export const getChatId = (uid1: string, uid2: string) => {
+    return [uid1, uid2].sort().join("_");
+};
+
+export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) => {
+    if (!db) return () => {};
+    const q = query(collection(db, "global_chat"), orderBy("createdAt", "asc"), limit(100));
+    return onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().createdAt?.toMillis() || Date.now()
+        } as Message));
+        callback(messages);
+    }, (error) => {
+        console.error("Global Chat Error:", error);
+    });
+};
+
+export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string, role?: UserRole }) => {
+    if (!db || !auth?.currentUser) {
+        alert("خطا: دیتابیس یا کاربر یافت نشد.");
+        return;
+    }
+    const msgData = {
+        ...message,
+        senderId: auth.currentUser.uid,
+        senderName: userProfile.name,
+        senderAvatar: userProfile.avatar || '',
+        senderRole: userProfile.role || 'user', // Add Role
+        createdAt: serverTimestamp(),
+        reactions: {},
+        type: message.type || 'text'
+    };
+    try {
+        await addDoc(collection(db, "global_chat"), msgData);
+    } catch (error: any) {
+        console.error("Send Global Error:", error);
+        alert("ارسال پیام ناموفق بود. " + (error.code === 'permission-denied' ? "شما دسترسی ارسال پیام ندارید." : "لطفا اتصال اینترنت را چک کنید."));
+    }
+};
+
+export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string, role?: UserRole }) => {
+    if (!db) throw new Error("دیتابیس متصل نیست.");
+    
+    const currentUser = auth?.currentUser;
+    const senderUid = currentUser?.uid || message.senderId;
+    
+    if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
+
+    const chatRef = doc(db, "chats", chatId);
+    
+    const chatUpdateData: any = { 
+        updatedAt: serverTimestamp(), 
+        lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
+        lastSenderId: senderUid 
+    };
+
+    if (receiverId === 'saved') {
+         chatUpdateData.participants = arrayUnion(senderUid);
+         chatUpdateData.type = 'user'; 
+    } 
+    else {
+         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
+    }
+
+    try {
+        await setDoc(chatRef, chatUpdateData, { merge: true });
+        
+        const safeMessage = sanitizeData({
+            ...message,
+            senderId: senderUid,
+            senderName: userProfile.name, 
+            senderAvatar: userProfile.avatar || '', 
+            senderRole: userProfile.role || 'user', // Add Role
+            createdAt: serverTimestamp(), 
+            reactions: {},
+            type: message.type || 'text'
+        });
+        
+        await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
+    } catch (error: any) {
+        console.error("Send Private Error:", error);
+        alert("ارسال پیام خصوصی ناموفق بود. " + (error.code === 'permission-denied' ? "دسترسی محدود شده است." : "خطای شبکه."));
+    }
+};
+
+export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
+    if (!db) return () => {};
+    const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "asc"), limit(100));
+    return onSnapshot(q, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().createdAt?.toMillis() || Date.now()
+        } as Message));
+        callback(messages);
+    });
+};
+
+// NEW: Get Shared Media (Real Data)
+export const getSharedMedia = async (chatId: string, isGlobal: boolean): Promise<Message[]> => {
+    if (!db) return [];
+    try {
+        const collectionRef = isGlobal 
+            ? collection(db, "global_chat") 
+            : collection(db, "chats", chatId, "messages");
+            
+        // We want images, videos, and files. Firestore 'in' query supports up to 10 values.
+        const q = query(
+            collectionRef, 
+            where("type", "in", ["image", "video_note", "file", "audio"]), 
+            orderBy("createdAt", "desc"), 
+            limit(50)
+        );
+
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().createdAt?.toMillis() || Date.now()
+        } as Message));
+    } catch (e) {
+        console.error("Error fetching shared media:", e);
+        return [];
+    }
+};
+
 export const saveChatFolders = async (uid: string, folders: ChatFolder[]) => {
     if (!db) return;
     await setDoc(doc(db, "users", uid, "settings", "folders"), { folders });
@@ -269,7 +387,6 @@ export const subscribeToChatFolders = (uid: string, callback: (folders: ChatFold
     }, (e) => console.warn("Folder listener error", e));
 };
 
-// --- CHAT PREFERENCES (PIN/ARCHIVE) ---
 export const updateUserChatPreference = async (uid: string, contactId: string, updates: { isPinned?: boolean; isArchived?: boolean }) => {
     if (!db) return;
     const prefRef = doc(db, "users", uid, "chat_preferences", contactId);
@@ -353,39 +470,6 @@ export const syncPhoneContacts = async (phones: string[]): Promise<UserProfileDa
     return results;
 };
 
-// --- CHAT & MESSAGING UTILITIES ---
-
-export const getChatId = (uid1: string, uid2: string) => {
-    return [uid1, uid2].sort().join("_");
-};
-
-export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) => {
-    if (!db) return () => {};
-    const q = query(collection(db, "global_chat"), orderBy("createdAt", "asc"), limit(100));
-    return onSnapshot(q, (snapshot) => {
-        const messages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().createdAt?.toMillis() || Date.now()
-        } as Message));
-        callback(messages);
-    });
-};
-
-export const sendGlobalMessage = async (message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
-    if (!db || !auth?.currentUser) return;
-    const msgData = {
-        ...message,
-        senderId: auth.currentUser.uid,
-        senderName: userProfile.name,
-        senderAvatar: userProfile.avatar || '',
-        createdAt: serverTimestamp(),
-        reactions: {},
-        type: message.type || 'text'
-    };
-    await addDoc(collection(db, "global_chat"), msgData);
-};
-
 export const uploadMedia = async (file: File, path: string): Promise<string> => {
     if (!storage) throw new Error("Storage unavailable");
     const storageRef = ref(storage, path);
@@ -421,9 +505,7 @@ export const updateUserHeartbeat = async (uid: string, status: string = 'online'
             lastSeen: serverTimestamp(),
             status: status 
         });
-    } catch(e) {
-        // Silent fail
-    }
+    } catch(e) {}
 };
 
 export const createGroup = async (name: string, description: string, imageFile: File | null, memberIds: string[], creatorId: string, isChannel: boolean) => {
@@ -451,58 +533,6 @@ export const createGroup = async (name: string, description: string, imageFile: 
 
     const docRef = await addDoc(collection(db, "chats"), groupData);
     return { id: docRef.id, ...groupData };
-};
-
-export const subscribeToPrivateChat = (chatId: string, callback: (messages: Message[]) => void) => {
-    if (!db) return () => {};
-    const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "asc"), limit(100));
-    return onSnapshot(q, (snapshot) => {
-        const messages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().createdAt?.toMillis() || Date.now()
-        } as Message));
-        callback(messages);
-    });
-};
-
-export const sendPrivateMessage = async (chatId: string, receiverId: string, message: Partial<Message>, userProfile: { name: string, avatar?: string }) => {
-    if (!db) throw new Error("دیتابیس متصل نیست.");
-    
-    const currentUser = auth?.currentUser;
-    const senderUid = currentUser?.uid || message.senderId;
-    
-    if (!senderUid) throw new Error("شناسه فرستنده یافت نشد.");
-
-    const chatRef = doc(db, "chats", chatId);
-    
-    const chatUpdateData: any = { 
-        updatedAt: serverTimestamp(), 
-        lastMessage: message.text || (message.type === 'poll' ? '📊 نظرسنجی' : 'رسانه'), 
-        lastSenderId: senderUid 
-    };
-
-    if (receiverId === 'saved') {
-         chatUpdateData.participants = arrayUnion(senderUid);
-         chatUpdateData.type = 'user'; 
-    } 
-    else {
-         chatUpdateData.participants = arrayUnion(senderUid, receiverId);
-    }
-
-    await setDoc(chatRef, chatUpdateData, { merge: true });
-    
-    const safeMessage = sanitizeData({
-        ...message,
-        senderId: senderUid,
-        senderName: userProfile.name, 
-        senderAvatar: userProfile.avatar || '', 
-        createdAt: serverTimestamp(), 
-        reactions: {},
-        type: message.type || 'text'
-    });
-    
-    await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
 };
 
 export const editPrivateMessage = async (chatId: string, messageId: string, newText: string) => {
@@ -612,8 +642,6 @@ export const setUserTyping = async (uid: string, isTyping: boolean) => {
     } catch(e) {}
 };
 
-// --- GROUP MANAGEMENT ---
-
 export const isGroupAdmin = async (chatId: string, userId: string) => {
     if (!db) return false;
     try {
@@ -693,7 +721,6 @@ export const getGroupDetails = async (chatId: string) => {
     return snap.exists() ? snap.data() : null;
 };
 
-// --- MISC UTILS & EXISTING EXPORTS ---
 export const getGroupMembers = async (chatId: string): Promise<UserProfileData[]> => {
     if (!db) return [];
     try {

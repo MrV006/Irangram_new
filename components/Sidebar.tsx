@@ -27,10 +27,11 @@ interface SidebarProps {
   onDeleteChat?: (id: string) => void;
   onPinChat?: (id: string) => void;
   onArchiveChat?: (id: string) => void;
+  onLogout?: () => void; // Added Prop
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
-  contacts, sessions, activeContactId, onSelectContact, toggleTheme, theme, userProfile, onOpenSettings, onOpenAdminPanel, onAddContact, showInstallButton, onInstall, storedAccounts, onAddAccount, onSwitchAccount, onCreateGroup, onDeleteChat, onPinChat, onArchiveChat
+  contacts, sessions, activeContactId, onSelectContact, toggleTheme, theme, userProfile, onOpenSettings, onOpenAdminPanel, onAddContact, showInstallButton, onInstall, storedAccounts, onAddAccount, onSwitchAccount, onCreateGroup, onDeleteChat, onPinChat, onArchiveChat, onLogout
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
@@ -514,6 +515,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <button onClick={() => { setShowFeaturesModal(true); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-5 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 transition-colors">
                         <HelpCircle size={22} className="text-gray-500" /> <span className="font-medium text-[15px]">ویژگی‌های ایران‌گرام</span>
                     </button>
+                    
+                    {onLogout && (
+                        <div className="mt-2 border-t border-gray-100 dark:border-white/5 pt-2">
+                            <button onClick={() => { onLogout(); setIsMenuOpen(false); }} className="w-full px-6 py-3.5 flex items-center gap-5 hover:bg-red-50 dark:hover:bg-red-900/10 text-red-600 transition-colors">
+                                <LogOut size={22} /> <span className="font-medium text-[15px]">خروج از حساب</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="animate-fade-in space-y-1">

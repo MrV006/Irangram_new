@@ -205,7 +205,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
       }
       
       const updated = [...bannedWords, wordToAdd];
-      // Update state first for immediate UI feedback
       setBannedWords(updated);
       setNewWord('');
       
@@ -213,7 +212,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
           await updateWordFilters(updated);
       } catch (e) {
           console.error("Failed to update words", e);
-          // Revert if failed
           setBannedWords(bannedWords);
           alert("خطا در ذخیره کلمات");
       }
@@ -332,7 +330,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-black/20">
             
-            {/* USERS TAB - CARD STYLE */}
+            {/* USERS TAB */}
             {activeTab === 'users' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
                     {loading ? <div className="col-span-2 text-center py-10">در حال بارگذاری کاربران...</div> : users.map(user => (
@@ -471,15 +469,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                 </div>
             )}
 
+            {/* FILTERS TAB */}
             {activeTab === 'filters' && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border dark:border-gray-700">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-800 dark:text-white">
                         <Filter size={20} className="text-blue-500" />
                         مدیریت کلمات ممنوعه
                     </h3>
-                    <div className="flex gap-2 mb-6">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        پیام‌های حاوی این کلمات به صورت خودکار فیلتر خواهند شد.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2 mb-6">
                         <input value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="کلمه ممنوعه جدید..." className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500" onKeyDown={(e) => e.key === 'Enter' && handleAddWord()} />
-                        <button onClick={handleAddWord} className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg font-bold">افزودن</button>
+                        <button onClick={handleAddWord} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold w-full sm:w-auto">افزودن</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {bannedWords.map(word => (
@@ -492,9 +494,43 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                 </div>
             )}
 
+            {/* REPORTS TAB */}
+            {activeTab === 'reports' && (
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 bg-white dark:bg-gray-800 p-3 rounded-lg">
+                        گزارشات کاربران درباره پیام‌های نامناسب در اینجا نمایش داده می‌شود. می‌توانید پیام را حذف یا کاربر خاطی را مسدود کنید.
+                    </p>
+                    {reports.length === 0 ? <p className="text-center text-gray-500 py-10">گزارش جدیدی وجود ندارد.</p> : reports.map(report => (
+                        <div key={report.id} className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-l-4 border-l-red-500 dark:border-gray-700 shadow-sm">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded">{report.reason}</span>
+                                <span className="text-xs text-gray-400">{new Date(report.createdAt).toLocaleString('fa-IR')}</span>
+                            </div>
+                            <p className="text-sm text-gray-800 dark:text-gray-200 mb-2"><strong>گزارش دهنده:</strong> {report.reporterId}</p>
+                            <div className="bg-gray-100 dark:bg-black/20 p-3 rounded-lg mb-3">
+                                <div className="text-xs text-gray-500 mb-1">پیام گزارش شده از {report.reportedUserName}:</div>
+                                <div className="text-sm text-gray-900 dark:text-white">{report.messageContent}</div>
+                            </div>
+                            {report.status === 'pending' ? (
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleReportAction(report.id, 'dismiss')} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs">نادیده گرفتن</button>
+                                    <button onClick={() => handleReportAction(report.id, 'ban', report.reportedUserId)} className="px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700">مسدود کردن کاربر</button>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-green-600 font-bold">بررسی شده توسط {report.handledBy}</div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* MAINTENANCE TAB */}
             {activeTab === 'maintenance' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                    <div className="col-span-1 md:col-span-2 text-sm text-gray-500 dark:text-gray-400 mb-2 bg-white dark:bg-gray-800 p-3 rounded-lg">
+                        ابزارهای زیر برای مدیریت وضعیت سرور و داده‌ها هستند. لطفا با احتیاط استفاده کنید.
+                    </div>
+
                     <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-col items-center text-center">
                         <div className="p-4 bg-blue-100 dark:bg-blue-800/30 rounded-full mb-4 text-blue-600"><RefreshCw size={32} /></div>
                         <h3 className="font-bold text-lg text-blue-800 dark:text-blue-300 mb-2">بروزرسانی اجباری</h3>

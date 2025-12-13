@@ -1,7 +1,7 @@
 
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2, CheckCircle2, ChevronRight, ChevronLeft, Bookmark } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Contact, Message, UserRole, PollData } from '../types';
 import ImageModal from './ImageModal';
@@ -943,7 +943,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 <div className="flex items-center justify-between px-3 py-2 h-16 animate-fade-in relative">
                      <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={onProfileClick}>
                         {isMobile && <button onClick={(e) => { e.stopPropagation(); onBack(); }} className="p-2 -mr-2 text-gray-500"><ArrowRight size={22} /></button>}
-                        <img src={contact.avatar || ''} className="w-10 h-10 rounded-full bg-gray-200 object-cover shrink-0" />
+                        {contact.id === 'saved' ? (
+                            <div className="w-10 h-10 rounded-full bg-blue-400 flex items-center justify-center text-white shrink-0">
+                                <Bookmark size={20} fill="currentColor" />
+                            </div>
+                        ) : (
+                            <img src={contact.avatar || ''} className="w-10 h-10 rounded-full bg-gray-200 object-cover shrink-0" />
+                        )}
                         <div className="flex flex-col overflow-hidden">
                             <h2 className="font-bold text-gray-900 dark:text-white truncate text-base flex items-center gap-1">
                                 {contact.name}

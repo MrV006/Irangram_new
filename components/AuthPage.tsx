@@ -88,15 +88,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, storedAccounts = [], ini
     } catch (err: any) {
       console.error(err);
       
-      if (err.code === 'auth/invalid-credential' && isLogin) {
-           setError('ایمیل یا رمز عبور اشتباه است.');
-           setLoading(false);
-           return;
-      }
-
-      if (err.code === 'auth/user-not-found' && isLogin) {
-           setIsLogin(false); // Switch to signup
-           setError('حساب کاربری با این ایمیل یافت نشد. فرم زیر را برای ثبت‌نام پر کنید.');
+      // Auto-switch to Signup if user not found or invalid credential (usually means not found/wrong pass)
+      if (isLogin && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')) {
+           // For strictly user-not-found:
+           if (err.code === 'auth/user-not-found') {
+               setIsLogin(false);
+               setError('حسابی با این مشخصات یافت نشد. به صفحه ثبت‌نام منتقل شدید.');
+               setLoading(false);
+               return;
+           }
+           
+           // For invalid-credential, it could be wrong password OR user not found.
+           setError('ایمیل یا رمز عبور اشتباه است. اگر حساب ندارید، لطفا ثبت‌نام کنید.');
            setLoading(false);
            return;
       }
