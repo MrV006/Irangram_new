@@ -1,10 +1,10 @@
 
 // Import the functions you need from the SDKs you need
-import * as firebaseApp from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import * as firebaseAuth from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
-import * as firebaseAnalytics from "firebase/analytics";
+import { getAnalytics } from "firebase/analytics";
 import { CONFIG } from "./config";
 
 // ------------------------------------------------------------------
@@ -28,7 +28,7 @@ let storage: any = null;
 let analytics: any = null;
 
 try {
-    app = firebaseApp.initializeApp(firebaseConfig);
+    app = initializeApp(firebaseConfig);
     
     // --- PROXY CONFIGURATION FOR FIRESTORE ---
     // If a proxy URL is set in config, parse the hostname and use it for Firestore.
@@ -61,12 +61,12 @@ try {
         db = getFirestore(app);
     }
 
-    auth = firebaseAuth.getAuth(app);
+    auth = getAuth(app);
     
     // Analytics (Optional)
     if (typeof window !== 'undefined') {
       try {
-        analytics = firebaseAnalytics.getAnalytics(app);
+        analytics = getAnalytics(app);
       } catch (e) {
         console.warn("Analytics not supported in this environment");
       }
@@ -81,7 +81,7 @@ try {
     }
     
     // Explicitly set persistence to LOCAL
-    firebaseAuth.setPersistence(auth, firebaseAuth.browserLocalPersistence).catch((error) => {
+    setPersistence(auth, browserLocalPersistence).catch((error) => {
         console.error("Firebase Persistence Error:", error);
     });
 

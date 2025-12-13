@@ -4,23 +4,15 @@ import { Message } from "../types";
 import { CONFIG } from "../config";
 
 // Initialize the Gemini AI client with the API key from environment variables.
-// Use lazy initialization or safe check to prevent app crash if key is missing.
 let ai: GoogleGenAI | null = null;
 
 try {
     const apiKey = process.env.API_KEY;
     if (apiKey) {
-        // IMPORTANT: Use the proxy URL as the baseUrl to bypass filtering in Iran
-        // We strip the trailing slash if present
-        const proxyBaseUrl = CONFIG.CLOUDFLARE_PROXY_URL 
-            ? CONFIG.CLOUDFLARE_PROXY_URL.replace(/\/$/, '') 
-            : undefined;
-
+        // Initialize Gemini AI
+        // Note: System-level proxying or fetch patching is handled externally if needed.
         ai = new GoogleGenAI({ 
-            apiKey: apiKey,
-            // If Proxy is set, route requests through it. 
-            // The worker must handle 'generativelanguage.googleapis.com' traffic.
-            baseUrl: proxyBaseUrl 
+            apiKey: apiKey
         });
     } else {
         console.warn("Gemini API Key is missing. AI features will be disabled.");
@@ -40,7 +32,6 @@ export const getGeminiResponse = async (
 
   try {
     // Format the conversation history for the model
-    // We filter for text messages and format them to provide context
     const conversationHistory = history
       .filter(m => m.type === 'text' && m.text)
       .slice(-20) // Limit to last 20 messages for context
@@ -49,7 +40,7 @@ export const getGeminiResponse = async (
 
     const prompt = `${conversationHistory}\nUser: ${userMessage}\nModel:`;
 
-    // Use gemini-2.5-flash for basic text chat tasks as per guidelines
+    // Use gemini-2.5-flash for basic text chat tasks
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,

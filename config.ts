@@ -4,20 +4,24 @@
  * This file centralizes connection settings. 
  */
 
+const DEFAULT_PROXY = 'https://irangram-proxy.amirrezaveisi45.workers.dev';
+
 export const CONFIG = {
   // Toggle this to switch between Local Mock and Real Server (Keep false for Firebase)
   USE_REAL_SERVER: false, 
 
   // IMPORTANT: Set this to your Cloudflare Worker URL to bypass filtering in Iran.
-  // 1. Create a Worker in Cloudflare Dashboard.
-  // 2. Paste the code from `proxy-worker.js`.
-  // 3. Copy the Worker URL (e.g. https://your-worker.subdomain.workers.dev) and paste it below.
-  // IF LEFT EMPTY: The app will try to connect directly to Google (Requires VPN).
-  CLOUDFLARE_PROXY_URL: 'https://irangram-proxy.amirrezaveisi45.workers.dev', 
+  // We allow reading from localStorage to let users change the proxy dynamically.
+  get CLOUDFLARE_PROXY_URL() {
+      if (typeof window !== 'undefined') {
+          return localStorage.getItem('irangram_proxy_url') || DEFAULT_PROXY;
+      }
+      return DEFAULT_PROXY;
+  },
 
   // App Info
   APP_NAME: 'ایران‌گرام',
-  VERSION: '2.0.0',
+  VERSION: '2.1.0',
   
   // SUPER ADMIN EMAILS
   OWNER_EMAIL: 'amirrezaveisi45@gmail.com',

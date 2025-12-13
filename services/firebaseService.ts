@@ -20,8 +20,19 @@ import {
   arrayUnion, 
   arrayRemove 
 } from "firebase/firestore";
-import * as firebaseAuth from "firebase/auth";
-import type { User } from "firebase/auth";
+import { 
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInAnonymously,
+  sendPasswordResetEmail,
+  updatePassword,
+  signOut,
+  type User
+} from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions } from "../types";
 import { CONFIG } from "../config";
@@ -108,7 +119,7 @@ export const subscribeToAuth = (callback: (user: any | null) => void) => {
     // 2. Listen to real SDK
     // If connection succeeds, this will trigger and might update the user state.
     // If connection fails (blocked), we rely on the step 1 above.
-    return firebaseAuth.onAuthStateChanged(auth, (user) => {
+    return onAuthStateChanged(auth, (user) => {
         if (user) {
             callback(user);
         } else {
@@ -168,8 +179,8 @@ export const registerUser = async (email: string, pass: string, name: string, ph
         console.warn("Proxy registration failed, trying SDK...", e);
         // Fallback to SDK (might fail without VPN)
         if (!auth) throw new Error("Auth unavailable");
-        const cred = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
-        await firebaseAuth.updateProfile(cred.user, { displayName: name });
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(cred.user, { displayName: name });
         // After SDK success, save proxy user to cache it for next reload
         saveProxyUser({ 
             localId: cred.user.uid, 
@@ -209,7 +220,7 @@ export const loginUser = async (email: string, pass: string) => {
     } catch (e: any) {
         console.warn("Proxy login failed, trying SDK...", e);
         if (auth) {
-            const cred = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
+            const cred = await signInWithEmailAndPassword(auth, email, pass);
             // Save proxy user for future caching
              saveProxyUser({ 
                 localId: cred.user.uid, 
@@ -225,13 +236,13 @@ export const loginUser = async (email: string, pass: string) => {
 
 export const loginWithGoogle = async (isLoginMode: boolean = false) => {
     if (!auth) throw new Error("سرویس احراز هویت در دسترس نیست.");
-    const provider = new firebaseAuth.GoogleAuthProvider();
+    const provider = new GoogleAuthProvider();
     
     // Google Sign-In requires redirection or popup to Google domains.
     // This is hard to proxy fully without a backend.
     
     try {
-        const result = await firebaseAuth.signInWithPopup(auth, provider);
+        const result = await signInWithPopup(auth, provider);
         const user = result.user;
         const email = user.email || '';
         
@@ -245,7 +256,7 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
             
             if (!docSnap.exists()) {
                 if (isLoginMode && email !== CONFIG.OWNER_EMAIL && email !== CONFIG.DEVELOPER_EMAIL && email !== 'developer.irangram@gmail.com') {
-                    await firebaseAuth.signOut(auth);
+                    await signOut(auth);
                     localStorage.setItem('irangram_auth_error', 'user-not-found');
                     localStorage.setItem('irangram_auth_retry_email', email);
                     localStorage.setItem('irangram_auth_retry_name', user.displayName || '');
@@ -284,7 +295,7 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
 
 export const loginAnonymously = async () => {
     if (!auth) throw new Error("Auth service unavailable");
-    const userCredential = await firebaseAuth.signInAnonymously(auth);
+    const userCredential = await signInAnonymously(auth);
     const user = userCredential.user;
     
     // Create a temporary guest profile
@@ -319,7 +330,7 @@ export const sendPasswordReset = async (email: string) => {
             body: JSON.stringify({ requestType: 'PASSWORD_RESET', email })
         });
     } catch(e) {
-        if (auth) await firebaseAuth.sendPasswordResetEmail(auth, email);
+        if (auth) await sendPasswordResetEmail(auth, email);
     }
 };
 
@@ -330,7 +341,7 @@ export const updateUserPassword = async (newPassword: string) => {
     // Note: Changing password via REST requires ID Token which we might need to refresh
     // For simplicity, fallback to SDK or require re-login for security in proxy mode
     if (auth?.currentUser) {
-        await firebaseAuth.updatePassword(auth.currentUser, newPassword);
+        await updatePassword(auth.currentUser, newPassword);
     } else {
         throw new Error("برای تغییر رمز عبور لطفا از طریق تنظیمات گوگل اقدام کنید یا مجددا وارد شوید.");
     }
@@ -346,7 +357,7 @@ export const logoutUser = async (uid?: string) => {
             console.warn("Could not update status to offline", e);
         }
     }
-    await firebaseAuth.signOut(auth);
+    await signOut(auth);
 };
 
 // ... Rest of the file uses 'db', which is now configured to use the proxy host in firebaseConfig.ts
