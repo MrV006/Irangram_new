@@ -1,5 +1,4 @@
 
-
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2, CheckCircle2, ChevronRight, ChevronLeft, Bookmark } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -8,6 +7,8 @@ import ImageModal from './ImageModal';
 import MessageBubble from './MessageBubble';
 import { clearGlobalChat, sendReport, blockUser, checkBlockedStatus, unblockUser, isGroupAdmin, uploadMediaWithProgress, castPollVote, getChatId, sendPrivateMessage, sendGlobalMessage, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, setChatPin, removeChatPin, toggleMessageReaction, updateUserChatPreference } from '../services/firebaseService';
 import ForwardModal from './ForwardModal';
+import { CONFIG } from '../config';
+import AdBanner from './AdBanner';
 
 interface ChatWindowProps {
   contact: Contact;
@@ -53,6 +54,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, message: Message, isMe: boolean } | null>(null);
+  const [showAd, setShowAd] = useState(true);
   
   // Pinned Message State
   const [activePinIndex, setActivePinIndex] = useState(0);
@@ -1031,6 +1033,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
         {/* Messages */}
         <div ref={chatContainerRef} onScroll={handleScroll} className="relative z-10 flex-1 overflow-y-auto p-2 sm:p-4 flex flex-col gap-0.5 scroll-smooth">
+            
+            {/* ADVERTISEMENT SLOT - CHAT TOP */}
+            {CONFIG.ADS.ENABLED && CONFIG.ADS.CHAT_TOP_BANNER && showAd && (
+                <div className="sticky top-0 z-30 mb-2 px-4 pointer-events-auto">
+                    <AdBanner 
+                        slotId={CONFIG.ADS.PROVIDERS.CHAT_ID} 
+                        format="banner" 
+                        className="rounded-xl shadow-md border border-gray-100 dark:border-gray-700" 
+                        onClose={() => setShowAd(false)}
+                    />
+                </div>
+            )}
+
             <AnimatePresence initial={false}>
                 {filteredMessages.map((msg, index) => {
                     const isMe = msg.senderId === 'me' || msg.senderId === myId;

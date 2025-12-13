@@ -17,7 +17,20 @@ export const CONFIG = {
   
   // SUPER ADMIN EMAILS
   OWNER_EMAIL: 'amirrezaveisi45@gmail.com',
-  DEVELOPER_EMAIL: 'developer.irangram@gmail.com'
+  DEVELOPER_EMAIL: 'developer.irangram@gmail.com',
+
+  // --- ADVERTISING SETTINGS ---
+  ADS: {
+    ENABLED: true, // Master switch for ads
+    USE_MOCK: true, // Set to false when you have real ad scripts
+    SIDEBAR_BANNER: true,
+    CHAT_TOP_BANNER: true,
+    // Configuration for Ad Providers (e.g., Yektanet, Google AdSense)
+    PROVIDERS: {
+        SIDEBAR_ID: 'sidebar-ad-slot',
+        CHAT_ID: 'chat-ad-slot'
+    }
+  }
 };
 
 export const ENDPOINTS = {

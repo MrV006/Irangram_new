@@ -6,6 +6,7 @@ import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount, 
 import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus, subscribeToChatFolders, saveChatFolders, resolveEntityByUsername } from '../services/firebaseService';
 import { CONFIG } from '../config';
 import FolderSettingsModal from './FolderSettingsModal';
+import AdBanner from './AdBanner';
 
 interface SidebarProps {
   contacts: Contact[];
@@ -811,6 +812,13 @@ const Sidebar: React.FC<SidebarProps> = ({
             ) : (
                 // NORMAL LIST
                 <div className="space-y-1">
+                    {/* ADVERTISEMENT SLOT - SIDEBAR BOTTOM */}
+                    {CONFIG.ADS.ENABLED && CONFIG.ADS.SIDEBAR_BANNER && (
+                        <div className="px-1 mb-2">
+                            <AdBanner slotId={CONFIG.ADS.PROVIDERS.SIDEBAR_ID} format="banner" className="rounded-xl overflow-hidden shadow-sm" />
+                        </div>
+                    )}
+
                     <AnimatePresence initial={false}>
                     {displayedContacts.length === 0 ? (
                         <div className="text-center py-10 text-gray-400">
