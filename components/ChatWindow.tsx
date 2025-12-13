@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -583,6 +584,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       inputRef.current?.focus();
   };
 
+  const handleCopy = () => {
+      if (contextMenu?.message.text) {
+          navigator.clipboard.writeText(contextMenu.message.text);
+          setContextMenu(null);
+      }
+  };
+
   return (
     <div 
         className="h-full flex flex-col relative bg-telegram-bg dark:bg-telegram-bgDark overflow-hidden"
@@ -856,6 +864,70 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </AnimatePresence>
             <div ref={messagesEndRef} />
         </div>
+
+        {/* Context Menu Overlay */}
+        {contextMenu && (
+            <>
+                <div className="fixed inset-0 z-[100]" onClick={() => setContextMenu(null)}></div>
+                <div 
+                    className="fixed z-[101] bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-700 w-56 overflow-hidden animate-fade-in flex flex-col"
+                    style={{ 
+                        top: Math.min(contextMenu.y, window.innerHeight - 350), 
+                        left: contextMenu.x > window.innerWidth / 2 ? contextMenu.x - 230 : contextMenu.x
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Reactions */}
+                    <div className="flex gap-2 p-2 border-b border-gray-100 dark:border-gray-700 overflow-x-auto no-scrollbar bg-gray-50 dark:bg-white/5">
+                        {COMMON_EMOJIS.slice(0, 6).map(emoji => (
+                            <button 
+                                key={emoji}
+                                onClick={() => { onReaction(contextMenu.message.id, emoji); setContextMenu(null); }}
+                                className="text-lg hover:scale-125 transition-transform p-1"
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="p-1 flex flex-col gap-0.5">
+                        <button onClick={() => { setReplyingTo(contextMenu.message); setContextMenu(null); inputRef.current?.focus(); }} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                            <Reply size={16} className="text-gray-500" /> پاسخ
+                        </button>
+                        
+                        {onForwardMessage && (
+                            <button onClick={() => { onForwardMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                                <Forward size={16} className="text-gray-500" /> فوروارد
+                            </button>
+                        )}
+
+                        {contextMenu.message.text && (
+                            <button onClick={handleCopy} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                                <Copy size={16} className="text-gray-500" /> کپی
+                            </button>
+                        )}
+
+                        {canPin && (
+                            <button onClick={() => { onPinMessage(contextMenu.message); setContextMenu(null); }} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                                <Pin size={16} className="text-gray-500" /> سنجاق
+                            </button>
+                        )}
+
+                        {contextMenu.isMe && contextMenu.message.type === 'text' && (
+                            <button onClick={() => { setEditingMessage(contextMenu.message); setInputValue(contextMenu.message.text); setContextMenu(null); inputRef.current?.focus(); }} className="w-full text-right px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 rounded-lg">
+                                <Edit2 size={16} className="text-gray-500" /> ویرایش
+                            </button>
+                        )}
+
+                        {(contextMenu.isMe || myPermissions?.canDeleteMessages || isSystemAdmin || (isGroup && contact.creatorId === myId)) && (
+                            <button onClick={() => { onDeleteMessage(contextMenu.message.id); setContextMenu(null); }} className="w-full text-right px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 flex items-center gap-3 text-sm rounded-lg">
+                                <Trash2 size={16} /> حذف
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </>
+        )}
 
         {/* Scroll To Bottom Button */}
         {showScrollButton && (
