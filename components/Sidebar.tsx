@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff, AlertTriangle, Phone, CircleUser, HelpCircle, Share2, Info, Edit3, FileText, Image as ImageIcon, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -151,7 +150,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   if (msg.type === 'file' || msg.type === 'image' || msg.type === 'audio' || msg.type === 'video_note') {
                       if (msg.fileName && msg.fileName.toLowerCase().includes(term)) {
                           matchedFiles.push({ msg, chat: contact });
-                      } else if (msg.type === 'text' && msg.text.toLowerCase().includes(term)) {
+                      } else if (msg.text && msg.text.toLowerCase().includes(term)) {
                           // Captions for media
                           matchedFiles.push({ msg, chat: contact }); 
                       }

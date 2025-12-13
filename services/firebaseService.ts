@@ -1,5 +1,4 @@
 
-
 import { db, auth, storage } from "../firebaseConfig";
 import { 
   collection, 
@@ -286,8 +285,8 @@ export const subscribeToChatPreferences = (uid: string, callback: (prefs: Record
     const q = collection(db, "users", uid, "chat_preferences");
     return onSnapshot(q, (snapshot) => {
         const prefs: Record<string, any> = {};
-        snapshot.forEach(doc => {
-            prefs[doc.id] = doc.data();
+        snapshot.forEach(d => {
+            prefs[d.id] = d.data();
         });
         callback(prefs);
     }, (error) => console.warn("ChatPref Listener Error:", error));
@@ -344,8 +343,8 @@ export const syncPhoneContacts = async (phones: string[]): Promise<UserProfileDa
         try {
             const q = query(collection(db, "users"), where("phone", "in", normalized));
             const snapshot = await getDocs(q);
-            snapshot.forEach(doc => {
-                results.push({ uid: doc.id, ...doc.data() } as UserProfileData);
+            snapshot.forEach(d => {
+                results.push({ uid: d.id, ...d.data() } as UserProfileData);
             });
         } catch (e) {
             console.error("Error syncing batch", e);
@@ -543,12 +542,12 @@ export const subscribeToAllUsers = (callback: (users: Partial<UserProfileData>[]
     if(!db) return () => {};
     const q = query(collection(db, "users"));
     return onSnapshot(q, (snapshot) => {
-        const users = snapshot.docs.map(doc => ({
-            uid: doc.id,
-            status: (doc.data() as any).status,
-            lastSeen: (doc.data() as any).lastSeen ? ((doc.data() as any).lastSeen as Timestamp).toMillis() : Date.now(),
-            name: (doc.data() as any).name,
-            avatar: (doc.data() as any).avatar
+        const users = snapshot.docs.map(d => ({
+            uid: d.id,
+            status: (d.data() as any).status,
+            lastSeen: (d.data() as any).lastSeen ? ((d.data() as any).lastSeen as Timestamp).toMillis() : Date.now(),
+            name: (d.data() as any).name,
+            avatar: (d.data() as any).avatar
         }));
         callback(users);
     }, (error) => console.warn("AllUsers Listener Error:", error));
@@ -656,9 +655,9 @@ export const subscribeToGlobalChat = (callback: (messages: Message[]) => void) =
     const q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(50));
     return onSnapshot(q, (querySnapshot) => {
         const messages: Message[] = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            messages.push({ id: doc.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
+        querySnapshot.forEach((d) => {
+            const data = d.data();
+            messages.push({ id: d.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
         });
         callback(messages.reverse());
     }, (error) => console.warn("GlobalChat Listener Error:", error));
@@ -705,9 +704,9 @@ export const subscribeToPrivateChat = (chatId: string, callback: (messages: Mess
     const q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(50));
     return onSnapshot(q, (querySnapshot) => {
         const messages: Message[] = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            messages.push({ id: doc.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
+        querySnapshot.forEach((d) => {
+            const data = d.data();
+            messages.push({ id: d.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), status: 'read', reactions: data.reactions || {} } as Message);
         });
         callback(messages.reverse());
     }, (error) => console.warn("PrivateChat Listener Error:", error));
@@ -782,7 +781,6 @@ export const sendPrivateMessage = async (chatId: string, receiverId: string, mes
     await addDoc(collection(db, "chats", chatId, "messages"), safeMessage);
 };
 
-// ... [REST OF FILE REMAINS UNCHANGED] ...
 export const castPollVote = async (chatId: string, messageId: string, optionId: string, userId: string, isGlobal: boolean = false) => { if (!db) return; const collectionPath = isGlobal ? "global_chat" : `chats/${chatId}/messages`; const msgRef = doc(db, collectionPath, messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const poll = data.poll as PollData; if (poll.isClosed) return; let newOptions = poll.options.map(opt => { const hasVotedThis = opt.voterIds.includes(userId); if (opt.id === optionId) { if (hasVotedThis) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; else return { ...opt, voterIds: [...opt.voterIds, userId] }; } else { if (!poll.allowMultiple && opt.voterIds.includes(userId)) return { ...opt, voterIds: opt.voterIds.filter(id => id !== userId) }; } return opt; }); await updateDoc(msgRef, { "poll.options": newOptions }); } } catch(e) { console.error("Voting failed", e); } };
 export const toggleMessageReaction = async (messageId: string, emoji: string, userId: string) => { if (!db) return; const msgRef = doc(db, "global_chat", messageId); try { const snap = await getDoc(msgRef); if (snap.exists()) { const data = snap.data(); const reactions = data.reactions || {}; const userList = reactions[emoji] || []; let newReactions = { ...reactions }; if (userList.includes(userId)) { newReactions[emoji] = userList.filter((id: string) => id !== userId); if (newReactions[emoji].length === 0) delete newReactions[emoji]; } else { newReactions[emoji] = [...userList, userId]; } await updateDoc(msgRef, { reactions: newReactions }); } } catch (e) {} };
 export const subscribeToSystemInfo = (callback: (info: SystemInfo & { forceUpdate: number, maintenanceMode?: boolean, globalScreenshotRestriction?: boolean }) => void) => { if (!db) return () => {}; const docRef = doc(db, "system", "info"); return onSnapshot(docRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); callback({ currentVersion: data.currentVersion || CONFIG.VERSION, lastCleanup: data.lastCleanup ? (data.lastCleanup as Timestamp).toMillis() : 0, forceUpdate: data.forceUpdate ? (data.forceUpdate as Timestamp).toMillis() : 0, maintenanceMode: data.maintenanceMode || false, globalScreenshotRestriction: data.globalScreenshotRestriction || false }); } else { setDoc(docRef, { currentVersion: CONFIG.VERSION, lastCleanup: serverTimestamp(), maintenanceMode: false }); } }, (error) => console.warn("SystemInfo Listener Error:", error)); };
@@ -795,34 +793,34 @@ export const subscribeToWordFilters = () => { if (!db) return () => {}; const do
 export const getWordFilters = async (): Promise<string[]> => { if (localBannedWords.length > 0) return localBannedWords; if (!db) return []; try { const docRef = doc(db, "settings", "wordFilters"); const snap = await getDoc(docRef); if (snap.exists()) { const words = (snap.data() as any).bannedWords || []; localBannedWords = words; return words; } } catch(e) { console.warn("Could not fetch word filters (offline)"); } return []; };
 export const updateWordFilters = async (words: string[]) => { if (!db) return; await setDoc(doc(db, "settings", "wordFilters"), { bannedWords: words }, { merge: true }); };
 export const getAdminSpyChats = async (targetUid: string): Promise<Contact[]> => { if (!db) return []; const chats: Contact[] = [{ id: 'global_chat', name: 'چت عمومی جهانی', avatar: 'https://cdn-icons-png.flaticon.com/512/921/921490.png', status: 'online', bio: 'Surveillance View', username: '@global_world', phone: '', type: 'group', isGlobal: true }]; try { chats.push({ id: `saved_${targetUid}`, name: 'پیام‌های ذخیره شده (Cloud)', avatar: '', status: 'online', bio: 'Personal Saved Messages', username: 'saved', phone: '', type: 'user', isGlobal: false }); const q = query(collection(db, "chats"), where("participants", "array-contains", targetUid)); const snapshot = await getDocs(q); const chatPromises = snapshot.docs.map(async (docSnapshot) => { const data = docSnapshot.data(); const participants = data.participants || []; if (data.type === 'group' || data.type === 'channel') { return { id: docSnapshot.id, name: data.name || 'Group', avatar: data.avatar, status: 'online', bio: data.type === 'channel' ? 'Channel' : 'Group', username: '', phone: '', type: data.type, isGlobal: false } as Contact; } else { const otherId = participants.find((id: string) => id !== targetUid); if (otherId) { const otherProfile = await getUserProfile(otherId); return { id: docSnapshot.id, name: otherProfile ? `چت با: ${otherProfile.name}` : `User: ${otherId}`, avatar: otherProfile?.avatar, status: 'offline', bio: 'Private Chat', username: otherProfile?.username || '', phone: '', type: 'user', isGlobal: false } as Contact; } } return null; }); const resolvedChats = await Promise.all(chatPromises); return [...chats, ...resolvedChats.filter(c => c !== null) as Contact[]]; } catch (e) { return chats; } };
-export const getAdminSpyMessages = async (targetUid: string, chatId: string): Promise<Message[]> => { if (!db) return []; try { let q; if (chatId === 'global_chat') { q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(100)); } else if (chatId.startsWith('saved_')) { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } else { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } const snapshot = await getDocs(q); return snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Message; }).reverse(); } catch (e) { return []; } };
+export const getAdminSpyMessages = async (targetUid: string, chatId: string): Promise<Message[]> => { if (!db) return []; try { let q; if (chatId === 'global_chat') { q = query(collection(db, "global_chat"), orderBy("createdAt", "desc"), limit(100)); } else if (chatId.startsWith('saved_')) { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } else { q = query(collection(db, "chats", chatId, "messages"), orderBy("createdAt", "desc"), limit(100)); } const snapshot = await getDocs(q); return snapshot.docs.map(d => { const data = d.data() as any; return { id: d.id, ...data, timestamp: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Message; }).reverse(); } catch (e) { return []; } };
 export const adminSendMessageAsUser = async (chatId: string, spoofedSenderId: string, text: string) => { if (!db || !text.trim()) return; try { const userProfile = await getUserProfile(spoofedSenderId); const messageData = { text, senderId: spoofedSenderId, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatar || '', type: 'text', createdAt: serverTimestamp(), isSticker: false, reactions: {} }; if (chatId === 'global_chat') { await addDoc(collection(db, "global_chat"), messageData); } else { await addDoc(collection(db, "chats", chatId, "messages"), messageData); await setDoc(doc(db, "chats", chatId), { lastMessage: text, lastSenderId: spoofedSenderId, updatedAt: serverTimestamp() }, { merge: true }); } } catch(e) {} };
 export const forceJoinGroup = async (groupId: string, userId: string) => { if (!db) return; const chatRef = doc(db, "chats", groupId); await updateDoc(chatRef, { participants: arrayUnion(userId), admins: arrayUnion(userId) }); };
-export const getAllGroups = async (): Promise<any[]> => { if (!db) return []; try { const q = query(collection(db, "chats"), where("type", "in", ["group", "channel"])); const snapshot = await getDocs(q); return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); } catch (e) { return []; } };
+export const getAllGroups = async (): Promise<any[]> => { if (!db) return []; try { const q = query(collection(db, "chats"), where("type", "in", ["group", "channel"])); const snapshot = await getDocs(q); return snapshot.docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { return []; } };
 export const sendSystemNotification = async (targetUid: string, title: string, message: string) => { if (!db) return; try { await addDoc(collection(db, "users", targetUid, "notifications"), { title, message, type: 'alert', read: false, createdAt: serverTimestamp() }); } catch (e) {} };
-export const subscribeToNotifications = (uid: string, callback: (notifs: AppNotification[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "users", uid, "notifications"), where("read", "==", false)); return onSnapshot(q, (snapshot) => { const notifs = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as AppNotification; }); notifs.sort((a, b) => b.createdAt - a.createdAt); callback(notifs); }, (error) => console.warn("Notifications Listener Error:", error)); };
+export const subscribeToNotifications = (uid: string, callback: (notifs: AppNotification[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "users", uid, "notifications"), where("read", "==", false)); return onSnapshot(q, (snapshot) => { const notifs = snapshot.docs.map(d => { const data = d.data() as any; return { id: d.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as AppNotification; }); notifs.sort((a, b) => b.createdAt - a.createdAt); callback(notifs); }, (error) => console.warn("Notifications Listener Error:", error)); };
 export const markNotificationRead = async (uid: string, notifId: string) => { if(!db) return; await updateDoc(doc(db, "users", uid, "notifications", notifId), { read: true }); };
 export const editMessageGlobal = async (messageId: string, newText: string) => { if (!db) return; try { await updateDoc(doc(db, "global_chat", messageId), { text: newText, edited: true }); } catch (e) {} };
-export const clearGlobalChat = async () => { if (!db) return; try { const q = query(collection(db, "global_chat")); const snapshot = await getDocs(q); const batch = writeBatch(db); let count = 0; snapshot.forEach((doc) => { batch.delete(doc.ref); count++; if (count >= 490) return; }); await batch.commit(); } catch (e) {} };
+export const clearGlobalChat = async () => { if (!db) return; try { const q = query(collection(db, "global_chat")); const snapshot = await getDocs(q); const batch = writeBatch(db); let count = 0; snapshot.forEach((d) => { batch.delete(d.ref); count++; if (count >= 490) return; }); await batch.commit(); } catch (e) {} };
 export const deleteMessageGlobal = async (messageId: string) => { if (!db) return; try { await deleteDoc(doc(db, "global_chat", messageId)); } catch (e) {} };
 export const deletePrivateMessage = async (chatId: string, messageId: string) => { if (!db) return; try { await deleteDoc(doc(db, "chats", chatId, "messages", messageId)); } catch (e) {} };
 export const deleteChat = async (chatId: string) => { if(!db) return; try { await deleteDoc(doc(db, "chats", chatId)); } catch(e) {} };
-export const clearPrivateChatHistory = async (chatId: string) => { if (!db) return; try { const q = query(collection(db, "chats", chatId, "messages"), limit(500)); const snapshot = await getDocs(q); const batch = writeBatch(db); snapshot.docs.forEach((doc) => batch.delete(doc.ref)); await batch.commit(); } catch (e) {} };
+export const clearPrivateChatHistory = async (chatId: string) => { if (!db) return; try { const q = query(collection(db, "chats", chatId, "messages"), limit(500)); const snapshot = await getDocs(q); const batch = writeBatch(db); snapshot.docs.forEach((d) => batch.delete(d.ref)); await batch.commit(); } catch (e) {} };
 export const blockUser = async (currentUid: string, targetUid: string) => { if(!db) return; try { await setDoc(doc(db, "users", currentUid, "blocked", targetUid), { blockedAt: serverTimestamp(), uid: targetUid }); } catch (e) {} };
 export const unblockUser = async (currentUid: string, targetUid: string) => { if(!db) return; try { await deleteDoc(doc(db, "users", currentUid, "blocked", targetUid)); } catch (e) {} };
 export const checkBlockedStatus = async (currentUid: string, targetUid: string) => { if(!db) return false; try { const docRef = doc(db, "users", currentUid, "blocked", targetUid); const snap = await getDoc(docRef); return snap.exists(); } catch { return false; } };
 export const sendBanAppeal = async (senderUid: string, senderName: string, appealText: string) => { if (!db) return; await addDoc(collection(db, "appeals"), { userId: senderUid, userName: senderName, message: appealText, status: 'pending', createdAt: serverTimestamp() }); };
-export const subscribeToAppeals = (callback: (appeals: Appeal[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "appeals"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const appeals = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Appeal; }); callback(appeals); }, (error) => console.warn("Appeals Listener Error:", error)); };
+export const subscribeToAppeals = (callback: (appeals: Appeal[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "appeals"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const appeals = snapshot.docs.map(d => { const data = d.data() as any; return { id: d.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as Appeal; }); callback(appeals); }, (error) => console.warn("Appeals Listener Error:", error)); };
 export const resolveAppeal = async (appealId: string, accepted: boolean) => { if (!db) return; await updateDoc(doc(db, "appeals", appealId), { status: accepted ? 'approved' : 'rejected' }); };
 export const deleteAppeal = async (appealId: string) => { if (!db) return; await deleteDoc(doc(db, "appeals", appealId)); };
 export const requestAccountDeletion = async (userId: string, userName: string, reason: string) => { if (!db) return; const q = query(collection(db, "deletion_requests"), where("userId", "==", userId)); const snap = await getDocs(q); if (snap.empty) { await addDoc(collection(db, "deletion_requests"), { userId, userName, reason, createdAt: serverTimestamp() }); } else { throw new Error("یک درخواست حذف هم‌اکنون در جریان است."); } };
-export const subscribeToDeletionRequests = (callback: (requests: DeletionRequest[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "deletion_requests"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const requests = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as DeletionRequest; }); callback(requests); }, (error) => console.warn("DeletionRequests Listener Error:", error)); };
+export const subscribeToDeletionRequests = (callback: (requests: DeletionRequest[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "deletion_requests"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const requests = snapshot.docs.map(d => { const data = d.data() as any; return { id: d.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now() } as DeletionRequest; }); callback(requests); }, (error) => console.warn("DeletionRequests Listener Error:", error)); };
 export const resolveDeletionRequest = async (requestId: string, userId: string, approve: boolean) => { if (!db) return; if (approve) await deleteUserAccount(userId); await deleteDoc(doc(db, "deletion_requests", requestId)); };
 export const sendReport = async (messageId: string, messageContent: string, reportedUserId: string, reportedUserName: string, reporterId: string, reason: string) => { if (!db) return; await addDoc(collection(db, "reports"), { messageId, messageContent, reportedUserId, reportedUserName, reporterId, reason, status: 'pending', createdAt: serverTimestamp() }); };
-export const subscribeToReports = (callback: (reports: Report[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "reports"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const reports = snapshot.docs.map(doc => { const data = doc.data() as any; return { id: doc.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), handledAt: data.handledAt ? (data.handledAt as Timestamp).toMillis() : undefined } as Report; }); callback(reports); }, (error) => console.warn("Reports Listener Error:", error)); };
+export const subscribeToReports = (callback: (reports: Report[]) => void) => { if (!db) return () => {}; const q = query(collection(db, "reports"), orderBy("createdAt", "desc")); return onSnapshot(q, (snapshot) => { const reports = snapshot.docs.map(d => { const data = d.data() as any; return { id: d.id, ...data, createdAt: data.createdAt ? (data.createdAt as Timestamp).toMillis() : Date.now(), handledAt: data.handledAt ? (data.handledAt as Timestamp).toMillis() : undefined } as Report; }); callback(reports); }, (error) => console.warn("Reports Listener Error:", error)); };
 export const handleReport = async (reportId: string, adminName: string) => { if (!db) return; await updateDoc(doc(db, "reports", reportId), { status: 'handled', handledBy: adminName, handledAt: serverTimestamp() }); };
 export const deleteReport = async (reportId: string) => { if (!db) return; await deleteDoc(doc(db, "reports", reportId)); };
-export const getAllUsers = async () => { if (!db) return []; try { const q = query(collection(db, "users")); const snapshot = await getDocs(q); return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData)); } catch (e) { console.error("Error fetching users", e); return []; } };
+export const getAllUsers = async () => { if (!db) return []; try { const q = query(collection(db, "users")); const snapshot = await getDocs(q); return snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfileData)); } catch (e) { console.error("Error fetching users", e); return []; } };
 export const updateUserRole = async (targetUid: string, newRole: UserRole) => { if (!db) return; await updateDoc(doc(db, "users", targetUid), { role: newRole }); };
 export const toggleUserBan = async (targetUid: string, currentBanStatus: boolean) => { if (!db) return; const docRef = doc(db, "users", targetUid); if (currentBanStatus) await updateDoc(docRef, { isBanned: false, banExpiresAt: null }); else await updateDoc(docRef, { isBanned: true }); };
 export const toggleUserMaintenance = async (targetUid: string, status: boolean) => { if(!db) return; await updateDoc(doc(db, "users", targetUid), { isUnderMaintenance: status }); };
