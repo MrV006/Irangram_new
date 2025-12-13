@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, Phone, AtSign, Bell, Image as ImageIcon, Video, FileText, Link as LinkIcon, MessageSquare, Globe, Users, Ban, Unlock, LogOut, Trash2, UserPlus, CheckCircle, Shield, Copy, UserMinus, Crown, Settings, Clock, CheckSquare, Bookmark, Cloud, ArrowRightCircle, Search, HardDrive, Music, PlayCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,7 +50,7 @@ const ProfilePane: React.FC<ProfilePaneProps> = ({ contact, onClose, onStartChat
               checkBlockedStatus(currentUserId, contact.id).then(setIsBlocked);
           } else {
               loadGroupData();
-              setInviteLink(getGroupInviteLink(contact.id));
+              setInviteLink(getGroupInviteLink(contact.username || contact.id));
           }
       }
       
@@ -331,176 +330,134 @@ const ProfilePane: React.FC<ProfilePaneProps> = ({ contact, onClose, onStartChat
              </div>
           )}
 
-          {/* User Specifics */}
-          {!isGroup && !isChannel && !isGlobal && !isSaved && (
-             <div className="bg-white dark:bg-telegram-secondaryDark rounded-xl shadow-sm mb-2 overflow-hidden">
-                 {contact.username && (
-                     <div className="p-4 border-b border-gray-50 dark:border-white/5 flex items-center justify-between">
-                         <div>
-                             <div className="text-xs font-bold text-telegram-primary mb-1">نام کاربری</div>
-                             <div className="text-sm dir-ltr text-right">@{contact.username}</div>
-                         </div>
-                         <AtSign size={18} className="text-gray-400" />
-                     </div>
-                 )}
-                 {contact.phone && (
-                     <div className="p-4 flex items-center justify-between">
-                         <div>
-                             <div className="text-xs font-bold text-telegram-primary mb-1">موبایل</div>
-                             <div className="text-sm dir-ltr text-right">{contact.phone}</div>
-                         </div>
-                         <Phone size={18} className="text-gray-400" />
-                     </div>
-                 )}
-             </div>
-          )}
-
-          {/* Group/Channel Invite Link */}
-          {!isGlobal && (isGroup || isChannel) && (
-             <div className="bg-white dark:bg-telegram-secondaryDark p-4 rounded-xl shadow-sm mb-2 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors" onClick={copyInviteLink}>
-                 <div className="overflow-hidden">
-                     <div className="text-xs font-bold text-telegram-primary mb-1">لینک دعوت</div>
-                     <div className="text-sm font-mono truncate text-gray-600 dark:text-gray-400">{inviteLink}</div>
-                 </div>
-                 <Copy size={18} className="text-blue-500 shrink-0 ml-2" />
-             </div>
-          )}
-
-          {/* Saved Messages Info */}
-          {isSaved && (
+          {/* Username/Phone Section for Users */}
+          {(!isGlobal && !isGroup && !isChannel && !isSaved) && (
               <div className="bg-white dark:bg-telegram-secondaryDark p-4 rounded-xl shadow-sm mb-2 space-y-3">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 text-green-600 rounded-lg"><HardDrive size={20}/></div>
-                      <div className="text-sm">ارسال فایل جهت ذخیره‌سازی</div>
+                  {contact.username && (
+                      <div className="flex items-center gap-3">
+                          <AtSign className="text-gray-400" size={20} />
+                          <div>
+                              <div className="text-sm text-gray-900 dark:text-white dir-ltr text-right">{contact.username}</div>
+                              <div className="text-xs text-gray-500">نام کاربری</div>
+                          </div>
+                      </div>
+                  )}
+                  {contact.phone && (
+                      <div className="flex items-center gap-3">
+                          <Phone className="text-gray-400" size={20} />
+                          <div>
+                              <div className="text-sm text-gray-900 dark:text-white dir-ltr text-right">{contact.phone}</div>
+                              <div className="text-xs text-gray-500">موبایل</div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          )}
+
+           {/* Invite Link & Slow Mode for Groups */}
+           {(isGroup || isChannel) && isGroupManager && (
+              <div className="bg-white dark:bg-telegram-secondaryDark p-4 rounded-xl shadow-sm mb-2 space-y-4">
+                  <div>
+                      <div className="text-xs font-bold text-telegram-primary mb-2 flex items-center gap-1"><LinkIcon size={14}/> لینک دعوت</div>
+                      <div className="flex gap-2">
+                          <input readOnly value={inviteLink} className="flex-1 bg-gray-50 dark:bg-black/20 p-2 rounded text-xs text-gray-600 dark:text-gray-300 font-mono" />
+                          <button onClick={copyInviteLink} className="p-2 bg-telegram-primary text-white rounded"><Copy size={16}/></button>
+                      </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><ArrowRightCircle size={20}/></div>
-                      <div className="text-sm">فوروارد پیام‌ها به اینجا</div>
-                  </div>
+                  {!isChannel && (
+                      <div>
+                          <div className="text-xs font-bold text-telegram-primary mb-2 flex items-center gap-1"><Clock size={14}/> حالت آرام (Slow Mode)</div>
+                          <div className="flex items-center gap-3">
+                              <input type="range" min="0" max="60" step="5" value={slowMode} onChange={handleSlowModeChange} className="flex-1 accent-telegram-primary" />
+                              <span className="text-xs font-bold w-12 text-center">{slowMode}s</span>
+                          </div>
+                      </div>
+                  )}
               </div>
-          )}
+           )}
 
-          {/* Slow Mode (Admin Only) */}
-          {(isGroup || isChannel) && !isGlobal && (chatCreatorId === currentUserId || isSystemAdmin) && (
-             <div className="bg-white dark:bg-telegram-secondaryDark p-4 rounded-xl shadow-sm mb-2">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-gray-500 flex items-center gap-1"><Clock size={14} /> حالت آهسته</span>
-                    <span className="text-xs bg-gray-100 dark:bg-white/10 px-2 py-0.5 rounded">{slowMode}s</span>
-                </div>
-                <input 
-                    type="range" 
-                    min="0" 
-                    max="60" 
-                    step="5" 
-                    value={slowMode} 
-                    onChange={handleSlowModeChange}
-                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-telegram-primary"
-                />
-             </div>
-          )}
+           {/* Shared Media Section */}
+           <div className="bg-white dark:bg-telegram-secondaryDark rounded-xl shadow-sm mb-2 overflow-hidden">
+               <div className="flex border-b border-gray-100 dark:border-white/5">
+                   <button onClick={() => setActiveTab('media')} className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'media' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>رسانه‌ها</button>
+                   <button onClick={() => setActiveTab('files')} className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'files' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500'}`}>فایل‌ها</button>
+               </div>
+               <div className="p-2 min-h-[150px] max-h-[300px] overflow-y-auto custom-scrollbar">
+                   {activeTab === 'media' ? renderMediaGrid() : renderFileList()}
+               </div>
+           </div>
 
-          {/* Members List (Group/Channel) */}
-          {(isGroup || isChannel) && !isGlobal && (
-             <div className="bg-white dark:bg-telegram-secondaryDark rounded-xl shadow-sm mb-2 overflow-hidden">
-                 <div className="p-3 border-b border-gray-50 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
-                     <div className="text-sm font-bold flex items-center gap-2">
-                         <Users size={16} /> اعضا ({groupMembers.length})
-                     </div>
-                     {isGroupManager && (
-                        <button onClick={() => setIsAddingMember(!isAddingMember)} className="text-telegram-primary text-xs font-bold flex items-center gap-1 hover:bg-blue-50 dark:hover:bg-white/5 px-2 py-1 rounded transition-colors">
-                            <UserPlus size={14} /> افزودن
-                        </button>
-                     )}
-                 </div>
-                 
-                 {isAddingMember && (
-                    <div className="p-3 bg-gray-50 dark:bg-black/20 border-b border-gray-100 dark:border-white/5 flex gap-2">
-                        <input value={addMemberQuery} onChange={(e) => setAddMemberQuery(e.target.value)} placeholder="نام کاربری..." className="flex-1 bg-white dark:bg-black/20 border dark:border-gray-600 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-telegram-primary outline-none" />
-                        <button onClick={handleAddMember} className="bg-telegram-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold">تایید</button>
-                    </div>
-                 )}
+           {/* Members List (Group/Channel) */}
+           {(isGroup || isChannel) && (
+               <div className="bg-white dark:bg-telegram-secondaryDark p-4 rounded-xl shadow-sm mb-2">
+                   <div className="flex justify-between items-center mb-3">
+                       <div className="text-xs font-bold text-telegram-primary flex items-center gap-1"><Users size={14}/> اعضا ({groupMembers.length})</div>
+                       {isGroupManager && (
+                           <button onClick={() => setIsAddingMember(!isAddingMember)} className="text-telegram-primary hover:bg-telegram-primary/10 p-1 rounded transition-colors"><UserPlus size={18}/></button>
+                       )}
+                   </div>
+                   
+                   {isAddingMember && (
+                       <div className="flex gap-2 mb-3 animate-fade-in">
+                           <input 
+                                value={addMemberQuery} 
+                                onChange={(e) => setAddMemberQuery(e.target.value)} 
+                                placeholder="نام کاربری (@username)..." 
+                                className="flex-1 bg-gray-50 dark:bg-black/20 p-2 rounded text-sm outline-none focus:ring-1 ring-telegram-primary"
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddMember()}
+                           />
+                           <button onClick={handleAddMember} className="bg-telegram-primary text-white p-2 rounded text-xs font-bold">افزودن</button>
+                       </div>
+                   )}
 
-                 <div className="max-h-60 overflow-y-auto">
-                     {groupMembers.map(member => (
-                         <div key={member.uid} className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
-                             <div className="flex items-center gap-3">
-                                 <img src={member.avatar} className="w-9 h-9 rounded-full bg-gray-200 object-cover" />
-                                 <div>
-                                     <div className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1">
-                                         {member.name}
-                                         {member.uid === currentUserId && <span className="text-[10px] text-gray-400 font-normal">(شما)</span>}
-                                         {chatCreatorId === member.uid && <Crown size={12} className="text-yellow-500 fill-current" />}
-                                     </div>
-                                     <div className="text-[10px] text-gray-500 font-mono truncate max-w-[100px]">@{member.username}</div>
-                                 </div>
-                             </div>
-                             
-                             {/* Admin Actions */}
-                             {isGroupManager && member.uid !== currentUserId && (
-                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                     {(chatCreatorId === currentUserId || isSystemAdmin) && (
-                                         <button onClick={() => openPermsModal(member.uid)} className="p-1.5 text-purple-500 hover:bg-purple-50 rounded"><Settings size={14} /></button>
-                                     )}
-                                     <button onClick={() => handlePromoteMember(member.uid)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Crown size={14} /></button>
-                                     <button onClick={() => handleRemoveMember(member.uid)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 size={14} /></button>
-                                 </div>
-                             )}
-                         </div>
-                     ))}
-                 </div>
-             </div>
-          )}
-          
-          {/* Shared Media Tabs */}
-          <div className="bg-white dark:bg-telegram-secondaryDark rounded-xl shadow-sm mb-2 overflow-hidden min-h-[200px]">
-              <div className="flex border-b border-gray-100 dark:border-white/5">
-                  <button 
-                    onClick={() => setActiveTab('media')}
-                    className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'media' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                      رسانه ({sharedMedia.filter(m => m.type === 'image' || m.type === 'video_note').length})
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('files')}
-                    className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'files' ? 'text-telegram-primary border-b-2 border-telegram-primary' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                      فایل ({sharedMedia.filter(m => m.type === 'file' || m.type === 'audio').length})
-                  </button>
-              </div>
-              <div className="p-1">
-                  {activeTab === 'media' ? renderMediaGrid() : renderFileList()}
-              </div>
-          </div>
+                   <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                       {groupMembers.map(member => (
+                           <div key={member.uid} className="flex items-center justify-between group">
+                               <div className="flex items-center gap-2 overflow-hidden">
+                                   <img src={member.avatar} className="w-8 h-8 rounded-full bg-gray-200" />
+                                   <div className="truncate">
+                                       <div className="text-sm font-bold text-gray-900 dark:text-white truncate">{member.name}</div>
+                                       <div className="text-[10px] text-gray-400">
+                                            {member.uid === chatCreatorId ? <span className="text-amber-500">مالک</span> : (member.uid === currentUserId ? 'شما' : '')}
+                                       </div>
+                                   </div>
+                               </div>
+                               
+                               {isGroupManager && member.uid !== currentUserId && member.uid !== chatCreatorId && (
+                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <button onClick={() => openPermsModal(member.uid)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Settings size={14}/></button>
+                                       <button onClick={() => handlePromoteMember(member.uid)} className="p-1.5 text-green-500 hover:bg-green-50 rounded" title="ارتقا به مدیر"><Crown size={14}/></button>
+                                       <button onClick={() => handleRemoveMember(member.uid)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="حذف کاربر"><UserMinus size={14}/></button>
+                                   </div>
+                               )}
+                           </div>
+                       ))}
+                   </div>
+               </div>
+           )}
 
-          {/* Danger Zone Actions */}
-          <div className="space-y-2 mt-4 pb-4">
-              {onStartChat && !isGlobal && !isSaved && (
-                <button 
-                    onClick={() => { onStartChat(contact); onClose(); }}
-                    className="w-full bg-white dark:bg-telegram-secondaryDark p-3 rounded-xl shadow-sm text-telegram-primary font-bold flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-white/5 transition-colors"
-                >
-                    <MessageSquare size={18} />
-                    شروع گفتگو
-                </button>
-              )}
+           {/* Actions */}
+           <div className="space-y-2 pb-20">
+               {!isSaved && !isGlobal && !isGroup && !isChannel && (
+                   <button 
+                       onClick={toggleBlock} 
+                       className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors ${isBlocked ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/10 dark:text-red-400'}`}
+                   >
+                       {isBlocked ? <Unlock size={18} /> : <Ban size={18} />}
+                       {isBlocked ? 'رفع مسدودی' : 'مسدود کردن کاربر'}
+                   </button>
+               )}
 
-              {!isGlobal && !isSaved && !isGroup && !isChannel && currentUserId && (
-                <button 
-                    onClick={toggleBlock}
-                    className={`w-full p-3 rounded-xl shadow-sm font-bold flex items-center justify-center gap-2 transition-colors ${isBlocked ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-white dark:bg-telegram-secondaryDark text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10'}`}
-                >
-                    {isBlocked ? <Unlock size={18} /> : <Ban size={18} />}
-                    {isBlocked ? 'رفع مسدودی کاربر' : 'مسدود کردن کاربر'}
-                </button>
-              )}
-
-              {(isGroup || isChannel) && !isGlobal && (
-                 <button onClick={handleLeaveGroup} className="w-full bg-white dark:bg-telegram-secondaryDark text-red-600 p-3 rounded-xl shadow-sm font-bold flex items-center justify-center gap-2 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">
-                     <LogOut size={18} />
-                     ترک {isChannel ? 'کانال' : 'گروه'}
-                 </button>
-              )}
-          </div>
+               {(isGroup || isChannel) && (
+                   <button 
+                       onClick={handleLeaveGroup}
+                       className="w-full py-3 bg-red-50 text-red-600 dark:bg-red-900/10 dark:text-red-400 hover:bg-red-100 rounded-xl flex items-center justify-center gap-2 font-bold transition-colors"
+                   >
+                       <LogOut size={18} />
+                       ترک {isChannel ? 'کانال' : 'گروه'}
+                   </button>
+               )}
+           </div>
 
       </div>
     </motion.div>

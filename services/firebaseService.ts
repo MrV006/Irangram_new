@@ -73,11 +73,13 @@ export const registerUser = async (email: string, pass: string, name: string, ph
         if (email === CONFIG.OWNER_EMAIL) role = 'owner';
         else if (email === CONFIG.DEVELOPER_EMAIL || email === 'developer.irangram@gmail.com') role = 'developer';
 
+        const username = email.split('@')[0].replace(/\./g, '_') + '_' + Math.floor(Math.random() * 1000);
+
         await setDoc(doc(db, "users", cred.user.uid), {
             name: name,
             email: email,
             phone: phone,
-            username: email.split('@')[0],
+            username: username,
             bio: "کاربر جدید ایران‌گرام",
             avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=128`,
             role: role,
@@ -129,11 +131,14 @@ export const loginWithGoogle = async (isLoginMode: boolean = false) => {
                     error.code = 'custom/user-not-found';
                     throw error;
                 }
+                
+                const username = (email.split('@')[0] || 'user').replace(/\./g, '_') + '_' + Math.floor(Math.random() * 1000);
+
                 await setDoc(docRef, {
                     name: user.displayName || 'کاربر گوگل',
                     email: email,
                     phone: '', 
-                    username: email.split('@')[0] || 'user',
+                    username: username,
                     bio: "کاربر جدید ایران‌گرام",
                     avatar: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random&color=fff&size=128`,
                     role: role,
@@ -429,23 +434,81 @@ export const updateUserProfileDoc = async (uid: string, data: any) => {
     await updateDoc(docRef, cleanData);
 };
 
-export const searchUser = async (term: string): Promise<UserProfileData | null> => {
+// Unified Entity Search (Users, Groups, Channels)
+export const resolveEntityByUsername = async (username: string): Promise<Contact | null> => {
     if (!db) return null;
+    const cleanUsername = username.replace('@', '').toLowerCase();
+    
     try {
-        let q = query(collection(db, "users"), where("username", "==", term.replace('@', '')));
+        // 1. Check Users
+        let q = query(collection(db, "users"), where("username", "==", cleanUsername));
         let snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            const userDoc = snapshot.docs[0];
-            return { uid: userDoc.id, ...userDoc.data() } as UserProfileData;
+            const doc = snapshot.docs[0];
+            const data = doc.data() as any;
+            return {
+                id: doc.id,
+                name: data.name,
+                avatar: data.avatar,
+                bio: data.bio,
+                username: '@' + data.username,
+                phone: data.phone,
+                status: data.status,
+                type: 'user'
+            };
         }
-        q = query(collection(db, "users"), where("phone", "==", term));
+
+        // 2. Check Chats (Groups/Channels)
+        q = query(collection(db, "chats"), where("username", "==", cleanUsername));
         snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            const userDoc = snapshot.docs[0];
-            return { uid: userDoc.id, ...userDoc.data() } as UserProfileData;
+            const doc = snapshot.docs[0];
+            const data = doc.data() as any;
+            return {
+                id: doc.id,
+                name: data.name,
+                avatar: data.avatar,
+                bio: data.description,
+                username: '@' + data.username,
+                phone: '',
+                status: 'online',
+                type: data.type
+            };
         }
     } catch (e) {
-        console.warn("User search failed (offline or other issue)");
+        console.warn("Resolve entity failed", e);
+    }
+    return null;
+};
+
+// Kept for backward compatibility but improved to search both
+export const searchUser = async (term: string): Promise<UserProfileData | null> => {
+    const result = await resolveEntityByUsername(term);
+    if (result && result.type === 'user') {
+        return {
+            uid: result.id,
+            name: result.name,
+            avatar: result.avatar,
+            bio: result.bio,
+            username: result.username.replace('@',''),
+            phone: result.phone,
+            role: 'user', // Default fallback
+            createdAt: Date.now(),
+            lastSeen: Date.now(),
+            status: result.status
+        } as UserProfileData;
+    }
+    // Check phone only if it's strictly a number
+    if (!db) return null;
+    if (/^\+?\d+$/.test(term)) {
+        try {
+            const q = query(collection(db, "users"), where("phone", "==", term));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const userDoc = snapshot.docs[0];
+                return { uid: userDoc.id, ...userDoc.data() } as UserProfileData;
+            }
+        } catch(e) {}
     }
     return null;
 };
@@ -518,11 +581,17 @@ export const createGroup = async (name: string, description: string, imageFile: 
         } catch (e) { console.error("Group image upload failed", e); }
     }
 
+    // Default username generation
+    const cleanName = name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    const uniqueSuffix = Math.floor(Math.random() * 10000).toString();
+    const username = (cleanName.length > 3 ? cleanName : 'group') + '_' + uniqueSuffix;
+
     const groupData = {
         name,
         description,
         avatar: avatarUrl,
         type: isChannel ? 'channel' : 'group',
+        username: username,
         creatorId,
         admins: [creatorId],
         participants: [...memberIds, creatorId],
@@ -679,8 +748,15 @@ export const leaveGroup = async (chatId: string, userId: string) => {
     });
 };
 
-export const getGroupInviteLink = (chatId: string) => {
-    return `${window.location.origin}/join/${chatId}`;
+export const getGroupInviteLink = (usernameOrId: string) => {
+    // Dynamic URL based on current window location
+    // This ensures if domain changes, the link updates automatically
+    if (!usernameOrId) return '';
+    if (typeof window === 'undefined') return '';
+    
+    const origin = window.location.origin;
+    const cleanUser = usernameOrId.replace('@', '');
+    return `${origin}/@${cleanUser}`;
 };
 
 export const joinGroupViaLink = async (chatId: string, userId: string) => {

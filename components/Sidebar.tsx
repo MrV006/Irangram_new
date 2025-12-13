@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff, AlertTriangle, Phone, CircleUser, HelpCircle, Share2, Info, Edit3, FileText, Image as ImageIcon, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount, ChatFolder, Message } from '../types';
-import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus, subscribeToChatFolders, saveChatFolders } from '../services/firebaseService';
+import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus, subscribeToChatFolders, saveChatFolders, resolveEntityByUsername } from '../services/firebaseService';
 import { CONFIG } from '../config';
 import FolderSettingsModal from './FolderSettingsModal';
 
@@ -68,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [showInstallModal, setShowInstallModal] = useState(false);
 
   // GLOBAL SEARCH STATE
-  const [globalResults, setGlobalResults] = useState<{ contacts: Contact[], messages: { msg: Message, chat: Contact }[], files: { msg: Message, chat: Contact }[] }>({ contacts: [], messages: [], files: [] });
+  const [globalResults, setGlobalResults] = useState<{ contacts: Contact[], messages: { msg: Message, chat: Contact }[], files: { msg: Message, chat: Contact }[], remote: Contact[] }>({ contacts: [], messages: [], files: [], remote: [] });
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
 
   const isGuest = userProfile.role === 'guest';
@@ -116,21 +116,21 @@ const Sidebar: React.FC<SidebarProps> = ({
     };
   }, []);
 
-  // Global Search Logic (Client-side Index)
+  // Global Search Logic (Client-side Index + Remote Username)
   useEffect(() => {
       if (!searchTerm.trim()) {
           setIsSearchingGlobal(false);
           return;
       }
 
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
           setIsSearchingGlobal(true);
           const term = searchTerm.toLowerCase();
           
           // Search Contacts
           const matchedContacts = contacts.filter(c => 
               c.name.toLowerCase().includes(term) || 
-              c.username.toLowerCase().includes(term)
+              (c.username && c.username.toLowerCase().includes(term))
           );
 
           // Search Messages & Files
@@ -164,13 +164,26 @@ const Sidebar: React.FC<SidebarProps> = ({
           matchedMessages.sort((a, b) => b.msg.timestamp - a.msg.timestamp);
           matchedFiles.sort((a, b) => b.msg.timestamp - a.msg.timestamp);
 
+          // SEARCH REMOTE USERNAME/GROUP IF NOT IN CONTACTS
+          const remoteResults: Contact[] = [];
+          // Only search remote if local contact not found or user explicitly looks for username
+          if (matchedContacts.length === 0 || term.startsWith('@')) {
+              try {
+                  const entity = await resolveEntityByUsername(term.replace('@', ''));
+                  if (entity && !contacts.some(c => c.id === entity.id)) {
+                      remoteResults.push(entity);
+                  }
+              } catch(e) {}
+          }
+
           setGlobalResults({
               contacts: matchedContacts,
               messages: matchedMessages,
-              files: matchedFiles
+              files: matchedFiles,
+              remote: remoteResults
           });
 
-      }, 300); // Debounce
+      }, 500); // Debounce
 
       return () => clearTimeout(timer);
   }, [searchTerm, contacts, sessions]);
@@ -703,7 +716,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {/* Contacts Section */}
                     {globalResults.contacts.length > 0 && (
                         <div className="mb-2">
-                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 px-3 mb-2">گفتگوها</h4>
+                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 px-3 mb-2">گفتگوهای موجود</h4>
                             {globalResults.contacts.map(contact => (
                                 <div 
                                     key={contact.id} 
@@ -713,8 +726,29 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     <img src={contact.avatar} className="w-10 h-10 rounded-full object-cover" />
                                     <div>
                                         <div className="font-bold text-sm text-gray-900 dark:text-white">{contact.name}</div>
-                                        <div className="text-xs text-gray-500">@{contact.username || 'کاربر'}</div>
+                                        <div className="text-xs text-gray-500">{contact.username || 'کاربر'}</div>
                                     </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Remote Search Section */}
+                    {globalResults.remote.length > 0 && (
+                        <div className="mb-2">
+                            <h4 className="text-xs font-bold text-telegram-primary px-3 mb-2">جستجوی سراسری (Global)</h4>
+                            {globalResults.remote.map(contact => (
+                                <div 
+                                    key={contact.id} 
+                                    onClick={() => onAddContact(contact)}
+                                    className="flex items-center gap-3 p-3 mx-1 rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 border border-dashed border-telegram-primary/30"
+                                >
+                                    <img src={contact.avatar} className="w-10 h-10 rounded-full object-cover" />
+                                    <div>
+                                        <div className="font-bold text-sm text-gray-900 dark:text-white">{contact.name}</div>
+                                        <div className="text-xs text-gray-500">{contact.username} • {contact.type === 'user' ? 'کاربر' : (contact.type === 'channel' ? 'کانال' : 'گروه')}</div>
+                                    </div>
+                                    <div className="mr-auto bg-telegram-primary/10 text-telegram-primary px-2 py-1 rounded text-xs">افزودن</div>
                                 </div>
                             ))}
                         </div>
@@ -768,7 +802,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                     )}
 
-                    {globalResults.contacts.length === 0 && globalResults.messages.length === 0 && globalResults.files.length === 0 && (
+                    {globalResults.contacts.length === 0 && globalResults.messages.length === 0 && globalResults.files.length === 0 && globalResults.remote.length === 0 && (
                         <div className="text-center py-10 text-gray-400">
                             <p className="text-sm">نتیجه‌ای یافت نشد.</p>
                         </div>
