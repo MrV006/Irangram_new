@@ -1,5 +1,4 @@
 
-
 export type UserRole = 'owner' | 'admin' | 'user' | 'developer' | 'guest';
 
 export interface PollOption {
@@ -21,6 +20,15 @@ export interface AdminPermissions {
     canPinMessages: boolean;
     canChangeInfo: boolean;
     canAddAdmins: boolean;
+}
+
+export interface SystemPermissions {
+    canBanUsers: boolean;
+    canDeleteUsers: boolean;
+    canManageGroups: boolean;
+    canSeeReports: boolean;
+    canManageFilters: boolean;
+    canSpy: boolean;
 }
 
 export interface ChatFolder {
@@ -89,6 +97,7 @@ export interface UserProfileData {
   bio: string;
   avatar: string;
   role: UserRole;
+  systemPermissions?: SystemPermissions; // New: Granular Admin Permissions
   isBanned?: boolean;
   isUnderMaintenance?: boolean; // Fake Maintenance Mode per user
   isScreenshotRestricted?: boolean; // New: Prevent Screenshots/Copying

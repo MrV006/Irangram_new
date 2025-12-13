@@ -1,8 +1,8 @@
 
-import React, { useEffect, useState } from 'react';
-import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon, Calendar, Info, Smartphone, CameraOff } from 'lucide-react';
-import { getAllUsers, updateUserRole, toggleUserBan, suspendUser, sendSystemNotification, getWordFilters, updateWordFilters, subscribeToReports, handleReport, deleteReport, getAdminSpyChats, getAdminSpyMessages, subscribeToAppeals, resolveAppeal, deleteAppeal, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, triggerSystemUpdate, wipeSystemData, deleteUserAccount, subscribeToDeletionRequests, resolveDeletionRequest, adminSendMessageAsUser, getAllGroups, forceJoinGroup, deleteChat, toggleUserMaintenance, setGlobalMaintenance, subscribeToSystemInfo, toggleUserScreenshotRestriction, setGlobalScreenshotRestriction } from '../services/firebaseService';
-import { UserProfileData, UserRole, Message, Report, Contact, Appeal, DeletionRequest } from '../types';
+import React, { useEffect, useState, useRef } from 'react';
+import { X, ShieldAlert, User, Trash2, Ban, CheckCircle, Bell, MessageSquare, Send, Settings, Eye, AlertTriangle, Flag, Check, ListChecks, ArrowLeft, ArrowRight, BookOpenCheck, Clock, Users, LogIn, Eraser, RefreshCw, Filter, Copy, Construction, Lock as LockIcon, Calendar, Info, Smartphone, CameraOff, PenTool } from 'lucide-react';
+import { getAllUsers, updateUserRole, toggleUserBan, suspendUser, sendSystemNotification, getWordFilters, updateWordFilters, subscribeToReports, handleReport, deleteReport, getAdminSpyChats, getAdminSpyMessages, subscribeToAppeals, resolveAppeal, deleteAppeal, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, triggerSystemUpdate, wipeSystemData, deleteUserAccount, subscribeToDeletionRequests, resolveDeletionRequest, adminSendMessageAsUser, getAllGroups, forceJoinGroup, deleteChat, toggleUserMaintenance, setGlobalMaintenance, subscribeToSystemInfo, toggleUserScreenshotRestriction, setGlobalScreenshotRestriction, updateUserSystemPermissions } from '../services/firebaseService';
+import { UserProfileData, UserRole, Message, Report, Contact, Appeal, DeletionRequest, SystemPermissions } from '../types';
 import { CONFIG } from '../config';
 
 interface AdminPanelProps {
@@ -12,6 +12,15 @@ interface AdminPanelProps {
   currentUserId: string; // Added currentUserId
   onStartChat: (user: UserProfileData) => void;
 }
+
+const DEFAULT_ADMIN_PERMISSIONS: SystemPermissions = {
+    canBanUsers: true,
+    canDeleteUsers: false,
+    canManageGroups: true,
+    canSeeReports: true,
+    canManageFilters: false,
+    canSpy: false
+};
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, currentUserRole, currentUserId, onStartChat }) => {
   // Tabs state
@@ -37,10 +46,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
   const [activeSpyChat, setActiveSpyChat] = useState<string | null>(null);
   const [spyMessages, setSpyMessages] = useState<Message[]>([]);
   const [spyImpersonateText, setSpyImpersonateText] = useState('');
+  const spyMessagesEndRef = useRef<HTMLDivElement>(null);
 
   // Notification Modal state
   const [notifModal, setNotifModal] = useState<{ isOpen: boolean; targetUid: string | null; targetName: string }>({ isOpen: false, targetUid: null, targetName: '' });
   const [notifText, setNotifText] = useState({ title: '', message: '' });
+
+  // Admin Permission Modal
+  const [permModal, setPermModal] = useState<{ isOpen: boolean; targetUid: string | null; perms: SystemPermissions }>({ isOpen: false, targetUid: null, perms: DEFAULT_ADMIN_PERMISSIONS });
 
   const isSuperAdmin = currentUserRole === 'owner' || currentUserRole === 'developer';
 
@@ -61,6 +74,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
     
     return () => { unsubReports(); unsubAppeals(); unsubDeletions(); };
   }, []);
+
+  // Scroll to bottom of spy chat on load/update
+  useEffect(() => {
+      spyMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [spyMessages]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -121,6 +139,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
     }
   };
   
+  const handleOpenPermModal = (uid: string) => {
+      const targetUser = users.find(u => u.uid === uid);
+      if (targetUser) {
+          setPermModal({
+              isOpen: true,
+              targetUid: uid,
+              perms: targetUser.systemPermissions || DEFAULT_ADMIN_PERMISSIONS
+          });
+      }
+  };
+
+  const handleSavePerms = async () => {
+      if (!permModal.targetUid) return;
+      await updateUserSystemPermissions(permModal.targetUid, permModal.perms);
+      setUsers(users.map(u => u.uid === permModal.targetUid ? { ...u, systemPermissions: permModal.perms } : u));
+      setPermModal({ isOpen: false, targetUid: null, perms: DEFAULT_ADMIN_PERMISSIONS });
+      alert("دسترسی‌های ادمین به‌روزرسانی شد.");
+  };
+
   const handleBanToggle = async (uid: string, isBanned: boolean) => {
     if (uid === currentUserId) {
         alert("شما نمی‌توانید خودتان را مسدود کنید.");
@@ -287,7 +324,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
       if (!activeSpyChat || !spyModal.targetUid || !spyImpersonateText.trim()) return;
       await adminSendMessageAsUser(activeSpyChat, spyModal.targetUid, spyImpersonateText);
       setSpyImpersonateText('');
-      getAdminSpyMessages(spyModal.targetUid, activeSpyChat).then(setSpyMessages);
+      // Give firebase a moment to process the timestamp
+      setTimeout(() => {
+          getAdminSpyMessages(spyModal.targetUid!, activeSpyChat).then(setSpyMessages);
+      }, 500);
   };
 
   return (
@@ -355,21 +395,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                             <span className="px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs font-bold flex items-center gap-1"><CheckCircle size={10}/> فعال</span>
                                         )}
                                         {user.isUnderMaintenance && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-bold flex items-center gap-1"><Construction size={10}/> در حال تعمیر</span>}
-                                        {user.isScreenshotRestricted && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold flex items-center gap-1"><CameraOff size={10}/> اسکرین‌شات ممنوع</span>}
                                         
                                         {isSuperAdmin && user.uid !== currentUserId ? (
-                                            <select 
-                                                value={user.role} 
-                                                onChange={(e) => handleRoleChange(user.uid, e.target.value)}
-                                                className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs border-none outline-none cursor-pointer"
-                                                disabled={user.role === 'developer' && currentUserRole !== 'developer'}
-                                            >
-                                                <option value="user">کاربر</option>
-                                                <option value="admin">ادمین</option>
-                                                <option value="owner">مدیر کل</option>
-                                                <option value="guest">مهمان</option>
-                                                {currentUserRole === 'developer' && <option value="developer">برنامه‌نویس</option>}
-                                            </select>
+                                            <div className="flex items-center gap-1">
+                                                <select 
+                                                    value={user.role} 
+                                                    onChange={(e) => handleRoleChange(user.uid, e.target.value)}
+                                                    className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs border-none outline-none cursor-pointer"
+                                                    disabled={user.role === 'developer' && currentUserRole !== 'developer'}
+                                                >
+                                                    <option value="user">کاربر</option>
+                                                    <option value="admin">ادمین</option>
+                                                    <option value="owner">مدیر کل</option>
+                                                    <option value="guest">مهمان</option>
+                                                    {currentUserRole === 'developer' && <option value="developer">برنامه‌نویس</option>}
+                                                </select>
+                                                {user.role === 'admin' && (
+                                                    <button onClick={() => handleOpenPermModal(user.uid)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500" title="سطح دسترسی">
+                                                        <Settings size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         ) : (
                                             <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs">{roleToLabel(user.role)}</span>
                                         )}
@@ -400,20 +446,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                                                     </button>
                                                     {isSuperAdmin && (
                                                         <button
+                                                            onClick={() => onStartChat(user)}
+                                                            className="p-2.5 bg-green-100 text-green-600 hover:bg-green-600 hover:text-white rounded-xl transition-all"
+                                                            title="ارسال پیام مستقیم"
+                                                        >
+                                                            <MessageSquare size={18} />
+                                                        </button>
+                                                    )}
+                                                    {isSuperAdmin && (
+                                                        <button
                                                             onClick={() => handleMaintenanceToggle(user.uid, user.isUnderMaintenance || false)}
                                                             className={`p-2.5 rounded-xl transition-all ${user.isUnderMaintenance ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-600 hover:bg-yellow-500 hover:text-white'}`}
                                                             title="حالت تعمیر برای کاربر"
                                                         >
                                                             <Construction size={18} />
-                                                        </button>
-                                                    )}
-                                                    {isSuperAdmin && (
-                                                        <button
-                                                            onClick={() => handleScreenshotToggle(user.uid, user.isScreenshotRestricted || false)}
-                                                            className={`p-2.5 rounded-xl transition-all ${user.isScreenshotRestricted ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600 hover:bg-purple-500 hover:text-white'}`}
-                                                            title="ممنوعیت اسکرین‌شات"
-                                                        >
-                                                            <CameraOff size={18} />
                                                         </button>
                                                     )}
                                                 </>
@@ -574,7 +620,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
             )}
         </div>
         
-        {/* Modals remain mostly unchanged */}
+        {/* Spy Modal - Fixed Sorting and Layout */}
         {spyModal.isOpen && (
              <div className="absolute inset-0 z-[110] bg-black/70 flex items-center justify-center p-4 animate-fade-in">
                  <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-6xl h-[80vh] shadow-2xl flex flex-col overflow-hidden border border-purple-500/30">
@@ -602,13 +648,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
                          <div className="flex-1 flex flex-col bg-white dark:bg-black/20 relative">
                              {activeSpyChat ? (
                                  <>
-                                     <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-2">
+                                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
                                         {spyMessages.map(msg => (
                                             <div key={msg.id} className={`max-w-[80%] p-3 rounded-xl border shadow-sm text-sm ${msg.senderId === spyModal.targetUid ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 self-end rounded-tr-none' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 self-start rounded-tl-none'}`}>
                                                 <div className="text-[10px] font-bold text-purple-600 mb-1 opacity-70">{msg.senderName} ({new Date(msg.timestamp).toLocaleTimeString()})</div>
                                                 <div className="text-gray-800 dark:text-gray-200">{msg.text}</div>
                                             </div>
                                         ))}
+                                        <div ref={spyMessagesEndRef} />
                                      </div>
                                      <div className="p-3 bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 flex gap-2">
                                          <input 
@@ -636,6 +683,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserEmail, curr
              </div>
         )}
 
+        {/* Permission Modal */}
+        {permModal.isOpen && (
+            <div className="absolute inset-0 z-[130] bg-black/60 flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-sm p-6 shadow-2xl">
+                    <h3 className="font-bold text-lg mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+                        <Settings size={20} />
+                        سطح دسترسی ادمین
+                    </h3>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {Object.keys(DEFAULT_ADMIN_PERMISSIONS).map((key) => (
+                            <div key={key} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer" 
+                                 onClick={() => setPermModal(prev => ({
+                                     ...prev,
+                                     perms: { ...prev.perms, [key]: !prev.perms[key as keyof SystemPermissions] }
+                                 }))}>
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                                    {key === 'canBanUsers' && 'مسدود کردن کاربران'}
+                                    {key === 'canDeleteUsers' && 'حذف حساب کاربران'}
+                                    {key === 'canManageGroups' && 'مدیریت گروه‌ها (حذف/عضویت)'}
+                                    {key === 'canSeeReports' && 'مشاهده و مدیریت گزارشات'}
+                                    {key === 'canManageFilters' && 'مدیریت فیلتر کلمات'}
+                                    {key === 'canSpy' && 'نظارت مخفی (Spy Mode)'}
+                                </span>
+                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${permModal.perms[key as keyof SystemPermissions] ? 'bg-blue-600 border-blue-600' : 'border-gray-400'}`}>
+                                    {permModal.perms[key as keyof SystemPermissions] && <Check size={14} className="text-white" />}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-2 mt-6">
+                        <button onClick={() => setPermModal({ ...permModal, isOpen: false })} className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300">انصراف</button>
+                        <button onClick={handleSavePerms} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold">ذخیره</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Notification Modal */}
         {notifModal.isOpen && (
             <div className="absolute inset-0 z-[120] bg-black/70 flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
