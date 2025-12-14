@@ -22,7 +22,7 @@ export const CONFIG = {
   // --- ADVERTISING SETTINGS ---
   ADS: {
     ENABLED: true, // Master switch for ads
-    USE_MOCK: true, // Set to false when you have real ad scripts
+    USE_MOCK: false, // Set to false when you have real ad scripts
     SIDEBAR_BANNER: true,
     CHAT_TOP_BANNER: true,
     // Configuration for Ad Providers (e.g., Yektanet, Google AdSense)

@@ -1,13 +1,14 @@
 
-const CACHE_NAME = 'irangram-cache-v2.2';
-const DYNAMIC_CACHE = 'irangram-dynamic-v2.2';
+const CACHE_NAME = 'irangram-cache-v2.3';
+const DYNAMIC_CACHE = 'irangram-dynamic-v2.3';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
   'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;300;400;500;700;900&display=swap'
+  'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;300;400;500;700;900&display=swap',
+  'https://cdn-icons-png.flaticon.com/512/2111/2111615.png'
 ];
 
 // Install Event
@@ -41,7 +42,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // 1. Ignore Firestore/Firebase API requests (Handled by SDK)
-  if (url.hostname.includes('googleapis.com') || url.hostname.includes('firebase')) {
+  // We explicitly allow fonts.googleapis.com to pass through to cache logic
+  if ((url.hostname.includes('googleapis.com') && !url.hostname.includes('fonts.googleapis.com')) || url.hostname.includes('firebase')) {
     return;
   }
 
@@ -63,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Network First, Fallback to Cache (For Documents/JS)
+  // 3. Network First, Fallback to Cache (For Documents/JS/Fonts)
   event.respondWith(
     fetch(event.request)
       .then((response) => {

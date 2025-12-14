@@ -86,11 +86,13 @@ const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', classNam
   }
 
   // 3. Real Ad Container (Script Injection)
+  // Ensure no "ad" or "banner" text in classes to avoid AdBlockers as per Yektanet rules.
+  // We remove flex centering to allow script injected content (like iframes) to handle their own layout.
   return (
     <div 
         id={slotId} 
         ref={adRef} 
-        className={`bg-gray-50 dark:bg-black/20 flex items-center justify-center ${className}`}
+        className={`bg-gray-50 dark:bg-black/20 ${className}`}
         style={{ minHeight: format === 'banner' ? '60px' : '250px' }}
     >
         {/* Ad Network Script will inject content here */}
