@@ -9,6 +9,8 @@ export interface AdSettings {
     providers: {
         sidebarId: string;
         chatId: string;
+        nativeListId: string; // New: For ads inside the chat list
+        nativeListPosition: number; // New: Index to insert the ad
     };
     customAd?: {
         isActive: boolean;

@@ -31,7 +31,7 @@ const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', classNam
               <img src={settings.customAd.imageUrl} className="w-full h-full object-cover" alt="Advertisement" />
               
               <div className="absolute top-1 left-1 bg-black/50 text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider backdrop-blur-sm">
-                  تبلیغات
+                  Sponsored
               </div>
               
               {settings.customAd.title && (
@@ -57,9 +57,9 @@ const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', classNam
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-5 dark:opacity-10 bg-[radial-gradient(#3390ec_1px,transparent_1px)] [background-size:16px_16px]"></div>
         
-        {/* Ad Label */}
+        {/* Label */}
         <div className="absolute top-1 left-1 bg-gray-200 dark:bg-gray-700 text-[9px] px-1 rounded text-gray-500 font-bold uppercase tracking-wider">
-          تبلیغات
+          Sponsored
         </div>
 
         {onClose && (
@@ -86,16 +86,18 @@ const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', classNam
   }
 
   // 3. Real Ad Container (Script Injection)
-  // Ensure no "ad" or "banner" text in classes to avoid AdBlockers as per Yektanet rules.
-  // We remove flex centering to allow script injected content (like iframes) to handle their own layout.
+  // Ensure strict compliance with Yektanet Anti-Adblock rules:
+  // - No "ad", "banner", "advertise" in class names.
+  // - ID must match slot ID exactly.
+  // - No display:none on container initially.
+  
   return (
     <div 
-        id={slotId} 
-        ref={adRef} 
-        className={`bg-gray-50 dark:bg-black/20 ${className}`}
-        style={{ minHeight: format === 'banner' ? '60px' : '250px' }}
+        className={`bg-transparent ${className}`}
+        style={{ minHeight: format === 'banner' ? '60px' : (format === 'rectangle' ? '250px' : 'auto') }}
     >
-        {/* Ad Network Script will inject content here */}
+        {/* The specific ID here allows Yektanet script to find and inject iframe/content */}
+        <div id={slotId} ref={adRef}></div>
     </div>
   );
 };

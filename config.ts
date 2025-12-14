@@ -28,7 +28,9 @@ export const CONFIG = {
     // Configuration for Ad Providers (e.g., Yektanet, Google AdSense)
     PROVIDERS: {
         SIDEBAR_ID: 'sidebar-ad-slot',
-        CHAT_ID: 'chat-ad-slot'
+        CHAT_ID: 'chat-ad-slot',
+        NATIVE_LIST_ID: 'native-list-ad', // Default placeholder
+        NATIVE_LIST_POS: 3 // Default position index
     }
   }
 };

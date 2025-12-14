@@ -944,7 +944,9 @@ export const subscribeToAdSettings = (callback: (settings: AdSettings) => void) 
                 chatTopBanner: CONFIG.ADS.CHAT_TOP_BANNER,
                 providers: {
                     sidebarId: CONFIG.ADS.PROVIDERS.SIDEBAR_ID,
-                    chatId: CONFIG.ADS.PROVIDERS.CHAT_ID
+                    chatId: CONFIG.ADS.PROVIDERS.CHAT_ID,
+                    nativeListId: CONFIG.ADS.PROVIDERS.NATIVE_LIST_ID,
+                    nativeListPosition: CONFIG.ADS.PROVIDERS.NATIVE_LIST_POS
                 }
             });
         }
