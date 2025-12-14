@@ -246,7 +246,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           <div className="flex justify-between items-end">
                               <div className="text-white">
                                   <div className="font-bold text-sm truncate max-w-[180px]">{userProfile.name}</div>
-                                  <div className="text-xs opacity-70 font-mono mt-0.5">{userProfile.phone || userProfile.email}</div>
+                                  <div className="text-xs opacity-70 font-mono mt-0.5">{userProfile.phone || (userProfile as any).email}</div>
                               </div>
                               <button onClick={() => setIsAccountsOpen(!isAccountsOpen)} className={`text-white transition-transform ${isAccountsOpen ? 'rotate-180' : ''}`}>
                                   <ChevronDown size={20} />

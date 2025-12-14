@@ -495,7 +495,8 @@ export const searchUser = async (term: string): Promise<UserProfileData | null> 
             role: 'user', // Default fallback
             createdAt: Date.now(),
             lastSeen: Date.now(),
-            status: result.status
+            status: result.status,
+            email: '' // Added to satisfy TS requirements
         } as UserProfileData;
     }
     // Check phone only if it's strictly a number
