@@ -15,7 +15,7 @@ interface SidebarProps {
   onSelectContact: (id: string, messageId?: string) => void;
   toggleTheme: () => void;
   theme: Theme;
-  userProfile: { uid: string; name: string; username: string; phone: string; email: string; role?: UserRole; avatar?: string };
+  userProfile: UserProfileData;
   onOpenSettings: () => void;
   onOpenAdminPanel: () => void;
   onAddContact: (contact: Contact) => void;
