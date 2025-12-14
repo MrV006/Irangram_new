@@ -27,10 +27,11 @@ export const CONFIG = {
     CHAT_TOP_BANNER: true,
     // Configuration for Ad Providers (e.g., Yektanet, Google AdSense)
     PROVIDERS: {
-        SIDEBAR_ID: 'sidebar-ad-slot',
-        CHAT_ID: 'chat-ad-slot',
-        NATIVE_LIST_ID: 'native-list-ad', // Default placeholder
-        NATIVE_LIST_POS: 3 // Default position index
+        SIDEBAR_ID: 'sidebar-ad-slot', // For rectangle/banner ads
+        CHAT_ID: 'chat-ad-slot', // For top of chat
+        // Updated to your specific text ad ID
+        NATIVE_LIST_ID: 'pos-article-text-113845', 
+        NATIVE_LIST_POS: 3 // Shows after the 3rd chat
     }
   }
 };
