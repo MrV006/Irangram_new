@@ -1,22 +1,56 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { CONFIG } from '../config';
 import { Megaphone, ExternalLink, X } from 'lucide-react';
+import { AdSettings } from '../types';
 
 interface AdBannerProps {
   slotId: string;
   format?: 'rectangle' | 'banner' | 'horizontal';
   className?: string;
   onClose?: () => void;
+  adSettings?: AdSettings | null;
 }
 
-const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', className = '', onClose }) => {
+const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', className = '', onClose, adSettings }) => {
   const adRef = useRef<HTMLDivElement>(null);
 
-  if (!CONFIG.ADS.ENABLED) return null;
+  // Fallback to static config if no dynamic settings provided
+  const settings = adSettings || {
+      enabled: CONFIG.ADS.ENABLED,
+      useMock: CONFIG.ADS.USE_MOCK,
+      customAd: undefined
+  };
 
-  // Mock Ad Component (For visual testing)
-  if (CONFIG.ADS.USE_MOCK) {
+  if (!settings.enabled) return null;
+
+  // 1. Custom Ad Render (Highest Priority)
+  if (settings.customAd?.isActive && settings.customAd.imageUrl) {
+      return (
+          <div className={`relative overflow-hidden rounded-xl group transition-all cursor-pointer ${className}`} onClick={() => window.open(settings.customAd!.linkUrl, '_blank')}>
+              <img src={settings.customAd.imageUrl} className="w-full h-full object-cover" alt="Advertisement" />
+              
+              <div className="absolute top-1 left-1 bg-black/50 text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider backdrop-blur-sm">
+                  تبلیغات
+              </div>
+              
+              {settings.customAd.title && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-6 text-white text-xs font-bold">
+                      {settings.customAd.title}
+                  </div>
+              )}
+
+              {onClose && (
+                <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-black/50 rounded-full text-white backdrop-blur-sm">
+                    <X size={12} />
+                </button>
+              )}
+          </div>
+      );
+  }
+
+  // 2. Mock Ad Component (For visual testing or fallback)
+  if (settings.useMock) {
     return (
       <div className={`relative overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-center p-3 select-none group transition-all ${format === 'rectangle' ? 'h-64 w-full rounded-xl' : 'h-16 w-full'} ${className}`}>
         
@@ -51,14 +85,7 @@ const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'banner', classNam
     );
   }
 
-  // Real Ad Container (Place your ad script logic here)
-  /*
-    Example for Yektanet or AdSense:
-    useEffect(() => {
-        // Inject script here based on slotId
-    }, []);
-  */
-
+  // 3. Real Ad Container (Script Injection)
   return (
     <div 
         id={slotId} 

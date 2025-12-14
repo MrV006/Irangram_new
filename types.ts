@@ -1,6 +1,23 @@
 
 export type UserRole = 'owner' | 'admin' | 'user' | 'developer' | 'guest';
 
+export interface AdSettings {
+    enabled: boolean;
+    useMock: boolean;
+    sidebarBanner: boolean;
+    chatTopBanner: boolean;
+    providers: {
+        sidebarId: string;
+        chatId: string;
+    };
+    customAd?: {
+        isActive: boolean;
+        imageUrl: string;
+        linkUrl: string;
+        title: string;
+    };
+}
+
 export interface PollOption {
     id: string;
     text: string;

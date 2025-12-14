@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Menu, Moon, Sun, Bookmark, Settings, ShieldAlert, UserPlus, X, Loader2, Download, ChevronDown, Plus, Users, Globe, MessageSquare, Trash2, Camera, RefreshCw, LogOut, CheckSquare, Square, Ban, User, Zap, Eraser, Megaphone, Archive, Pin, PinOff, Folder, FolderOpen, WifiOff, AlertTriangle, Phone, CircleUser, HelpCircle, Share2, Info, Edit3, FileText, Image as ImageIcon, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount, ChatFolder, Message } from '../types';
+import { Contact, ChatSession, Theme, UserRole, UserProfileData, StoredAccount, ChatFolder, Message, AdSettings } from '../types';
 import { searchUser, syncPhoneContacts, blockUser, unblockUser, checkBlockedStatus, subscribeToChatFolders, saveChatFolders, resolveEntityByUsername } from '../services/firebaseService';
 import { CONFIG } from '../config';
 import FolderSettingsModal from './FolderSettingsModal';
@@ -28,11 +28,12 @@ interface SidebarProps {
   onDeleteChat?: (id: string) => void;
   onPinChat?: (id: string) => void;
   onArchiveChat?: (id: string) => void;
-  onLogout?: () => void; // Added Prop
+  onLogout?: () => void;
+  adSettings?: AdSettings | null; // Added
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
-  contacts, sessions, activeContactId, onSelectContact, toggleTheme, theme, userProfile, onOpenSettings, onOpenAdminPanel, onAddContact, showInstallButton, onInstall, storedAccounts, onAddAccount, onSwitchAccount, onCreateGroup, onDeleteChat, onPinChat, onArchiveChat, onLogout
+  contacts, sessions, activeContactId, onSelectContact, toggleTheme, theme, userProfile, onOpenSettings, onOpenAdminPanel, onAddContact, showInstallButton, onInstall, storedAccounts, onAddAccount, onSwitchAccount, onCreateGroup, onDeleteChat, onPinChat, onArchiveChat, onLogout, adSettings
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
@@ -73,6 +74,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
 
   const isGuest = userProfile.role === 'guest';
+
+  // Determine Ad Config
+  const showSidebarAd = adSettings ? adSettings.sidebarBanner : CONFIG.ADS.SIDEBAR_BANNER;
+  const sidebarAdId = adSettings ? adSettings.providers.sidebarId : CONFIG.ADS.PROVIDERS.SIDEBAR_ID;
 
   // Load Folders
   useEffect(() => {
@@ -579,6 +584,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         placeholder="جستجو بر اساس نام کاربری..." 
                         className="w-full bg-gray-100 dark:bg-black/20 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-telegram-primary text-gray-900 dark:text-white transition-all" 
                         onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()}
+                        autoComplete="off"
                       />
                   </div>
                   
@@ -625,11 +631,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <div className="space-y-4 mb-6">
                       <div>
                           <label className="text-sm font-medium text-gray-500 mb-1 block">نام</label>
-                          <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder={isCreatingChannel ? "نام کانال" : "نام گروه"} className="w-full bg-gray-100 dark:bg-black/20 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-telegram-primary text-gray-900 dark:text-white transition-all" />
+                          <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder={isCreatingChannel ? "نام کانال" : "نام گروه"} className="w-full bg-gray-100 dark:bg-black/20 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-telegram-primary text-gray-900 dark:text-white transition-all" autoComplete="off" />
                       </div>
                       <div>
                           <label className="text-sm font-medium text-gray-500 mb-1 block">توضیحات</label>
-                          <input value={groupDesc} onChange={(e) => setGroupDesc(e.target.value)} placeholder="درباره..." className="w-full bg-gray-100 dark:bg-black/20 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-telegram-primary text-gray-900 dark:text-white transition-all" />
+                          <input value={groupDesc} onChange={(e) => setGroupDesc(e.target.value)} placeholder="درباره..." className="w-full bg-gray-100 dark:bg-black/20 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-telegram-primary text-gray-900 dark:text-white transition-all" autoComplete="off" />
                       </div>
                   </div>
                   {!isCreatingChannel && (
@@ -665,7 +671,7 @@ const Sidebar: React.FC<SidebarProps> = ({
          <div className="flex items-center gap-3 mb-3">
              <button onClick={() => { setIsMenuOpen(true); setIsAccountsOpen(false); }} className="p-2.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full text-gray-500 transition-colors"><Menu size={24} /></button>
              <div className="relative flex-1 group">
-                 <input type="text" placeholder="جستجو سراسری..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white rounded-full py-2.5 pr-10 pl-4 focus:outline-none focus:ring-2 focus:ring-telegram-primary/50 text-sm transition-all" />
+                 <input type="text" placeholder="جستجو سراسری..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white rounded-full py-2.5 pr-10 pl-4 focus:outline-none focus:ring-2 focus:ring-telegram-primary/50 text-sm transition-all" autoComplete="off" />
                  <Search className="absolute right-3.5 top-3 text-gray-400 w-4 h-4" />
              </div>
          </div>
@@ -813,9 +819,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                 // NORMAL LIST
                 <div className="space-y-1">
                     {/* ADVERTISEMENT SLOT - SIDEBAR BOTTOM */}
-                    {CONFIG.ADS.ENABLED && CONFIG.ADS.SIDEBAR_BANNER && (
+                    {showSidebarAd && (
                         <div className="px-1 mb-2">
-                            <AdBanner slotId={CONFIG.ADS.PROVIDERS.SIDEBAR_ID} format="banner" className="rounded-xl overflow-hidden shadow-sm" />
+                            <AdBanner slotId={sidebarAdId} format="banner" className="rounded-xl overflow-hidden shadow-sm" adSettings={adSettings} />
                         </div>
                     )}
 

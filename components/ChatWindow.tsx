@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ArrowRight, MoreVertical, Phone, Search, Paperclip, Mic, Send, Smile, Check, CheckCheck, X, Reply, Copy, Trash2, Edit2, ChevronDown, Image as ImageIcon, FileText, Play, Pause, Sticker, Shield, Crown, Download, ChevronUp, Signal, Flag, Pin, PinOff, Ban, Eraser, Unlock, Video, Megaphone, Trash, Globe, CornerUpRight, Forward, Loader2, ArrowDown, Camera, BarChart2, CheckCircle2, ChevronRight, ChevronLeft, Bookmark } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Contact, Message, UserRole, PollData } from '../types';
+import { Contact, Message, UserRole, PollData, AdSettings } from '../types';
 import ImageModal from './ImageModal';
 import MessageBubble from './MessageBubble';
 import { clearGlobalChat, sendReport, blockUser, checkBlockedStatus, unblockUser, isGroupAdmin, uploadMediaWithProgress, castPollVote, getChatId, sendPrivateMessage, sendGlobalMessage, deleteMessageGlobal, deletePrivateMessage, editMessageGlobal, editPrivateMessage, setChatPin, removeChatPin, toggleMessageReaction, updateUserChatPreference } from '../services/firebaseService';
@@ -33,7 +33,8 @@ interface ChatWindowProps {
   onBlockUser?: () => void;
   onTyping?: (isTyping: boolean) => void;
   onForwardMessage?: (message: Message) => void;
-  initialScrollToMessageId?: string; // New Prop for jumping
+  initialScrollToMessageId?: string;
+  adSettings?: AdSettings | null; // Added
 }
 
 const COMMON_EMOJIS = ["😀", "😂", "🥰", "😎", "🤔", "😭", "👍", "👎", "❤️", "🔥", "👀", "✅", "💯", "🌹"];
@@ -48,7 +49,7 @@ const STICKERS = [
 ];
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ 
-  contact, messages, myId, myRole, pinnedMessages = [], onSendMessage, onEditMessage, onDeleteMessage, onPinMessage, onUnpinMessage, onReaction, onBack, isMobile, onProfileClick, onAvatarClick, wallpaper, onCall, onClearHistory, onDeleteChat, onBlockUser, onTyping, onForwardMessage, initialScrollToMessageId
+  contact, messages, myId, myRole, pinnedMessages = [], onSendMessage, onEditMessage, onDeleteMessage, onPinMessage, onUnpinMessage, onReaction, onBack, isMobile, onProfileClick, onAvatarClick, wallpaper, onCall, onClearHistory, onDeleteChat, onBlockUser, onTyping, onForwardMessage, initialScrollToMessageId, adSettings
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -129,6 +130,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const draftKey = `draft_${myId}_${contact.id}`;
   const isSystemAdmin = myRole === 'owner' || myRole === 'developer';
   const isGuest = myRole === 'guest';
+
+  // Determine Ad Config
+  const showChatAd = adSettings ? adSettings.chatTopBanner : CONFIG.ADS.CHAT_TOP_BANNER;
+  const chatAdId = adSettings ? adSettings.providers.chatId : CONFIG.ADS.PROVIDERS.CHAT_ID;
 
   // --- Derived State for Gallery ---
   const chatImages = useMemo(() => {
@@ -1035,13 +1040,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <div ref={chatContainerRef} onScroll={handleScroll} className="relative z-10 flex-1 overflow-y-auto p-2 sm:p-4 flex flex-col gap-0.5 scroll-smooth">
             
             {/* ADVERTISEMENT SLOT - CHAT TOP */}
-            {CONFIG.ADS.ENABLED && CONFIG.ADS.CHAT_TOP_BANNER && showAd && (
+            {showChatAd && showAd && (
                 <div className="sticky top-0 z-30 mb-2 px-4 pointer-events-auto">
                     <AdBanner 
-                        slotId={CONFIG.ADS.PROVIDERS.CHAT_ID} 
+                        slotId={chatAdId} 
                         format="banner" 
                         className="rounded-xl shadow-md border border-gray-100 dark:border-gray-700" 
                         onClose={() => setShowAd(false)}
+                        adSettings={adSettings}
                     />
                 </div>
             )}

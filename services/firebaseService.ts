@@ -34,7 +34,7 @@ import {
   type User
 } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
-import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions, ChatFolder, SystemPermissions } from "../types";
+import { Message, SystemInfo, Contact, UserRole, UserProfileData, AppNotification, SettingsDoc, Report, Appeal, DeletionRequest, PollData, AdminPermissions, ChatFolder, SystemPermissions, AdSettings } from "../types";
 import { CONFIG } from "../config";
 
 let localBannedWords: string[] = [];
@@ -927,3 +927,31 @@ export const toggleUserScreenshotRestriction = async (targetUid: string, status:
 export const setGlobalScreenshotRestriction = async (status: boolean) => { if(!db) return; await setDoc(doc(db, "system", "info"), { globalScreenshotRestriction: status }, { merge: true }); };
 export const suspendUser = async (targetUid: string, hours: number) => { if (!db) return; const expireTime = Date.now() + (hours * 60 * 60 * 1000); await updateDoc(doc(db, "users", targetUid), { isBanned: true, banExpiresAt: expireTime }); };
 export const checkAndLiftBan = async (uid: string, currentProfile: UserProfileData) => { if (!db || !currentProfile.isBanned || !currentProfile.banExpiresAt) return; if (currentProfile.role === 'owner' || currentProfile.role === 'developer') { await updateDoc(doc(db, "users", uid), { isBanned: false, banExpiresAt: null }); return; } if (Date.now() > currentProfile.banExpiresAt) { await updateDoc(doc(db, "users", uid), { isBanned: false, banExpiresAt: null }); } };
+
+// --- ADVERTISING SETTINGS ---
+export const subscribeToAdSettings = (callback: (settings: AdSettings) => void) => {
+    if (!db) return () => {};
+    const docRef = doc(db, "settings", "ads");
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data() as AdSettings);
+        } else {
+            // Fallback to static config if doc doesn't exist
+            callback({
+                enabled: CONFIG.ADS.ENABLED,
+                useMock: CONFIG.ADS.USE_MOCK,
+                sidebarBanner: CONFIG.ADS.SIDEBAR_BANNER,
+                chatTopBanner: CONFIG.ADS.CHAT_TOP_BANNER,
+                providers: {
+                    sidebarId: CONFIG.ADS.PROVIDERS.SIDEBAR_ID,
+                    chatId: CONFIG.ADS.PROVIDERS.CHAT_ID
+                }
+            });
+        }
+    }, (error) => console.warn("AdSettings Listener Error:", error));
+};
+
+export const updateAdSettings = async (settings: AdSettings) => {
+    if (!db) return;
+    await setDoc(doc(db, "settings", "ads"), settings, { merge: true });
+};

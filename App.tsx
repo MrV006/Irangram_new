@@ -1,15 +1,14 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import ProfilePane from './components/ProfilePane';
 import SettingsModal from './components/SettingsModal';
-import AdminPanel from './components/AdminPanel';
+import { AdminPanel } from './components/AdminPanel'; // Ensure this matches named export
 import AuthPage from './components/AuthPage';
 import BanScreen from './components/BanScreen';
 import ForwardModal from './components/ForwardModal';
 import CallModal from './components/CallModal';
-import { Contact, ChatSession, Message, Theme, UserRole, UserProfileData, StoredAccount } from './types';
+import { Contact, ChatSession, Message, Theme, UserRole, UserProfileData, StoredAccount, AdSettings } from './types';
 import { 
     subscribeToGlobalChat, 
     sendGlobalMessage, 
@@ -51,7 +50,8 @@ import {
     castPollVote,
     subscribeToWordFilters,
     resolveEntityByUsername,
-    addGroupMember
+    addGroupMember,
+    subscribeToAdSettings
 } from './services/firebaseService';
 import { 
     initializeWebRTC, 
@@ -65,7 +65,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CONFIG } from './config';
 
 // Short Pop Sound (Base64)
-const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+const POP_SOUND_BASE64 = "data:audio/mpeg;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 const RING_SOUND = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg";
 
 const INITIAL_CONTACTS: Contact[] = [
@@ -197,6 +197,9 @@ const App: React.FC = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [globalScreenshotRestriction, setGlobalScreenshotRestriction] = useState(false);
   
+  // Ad State
+  const [adSettings, setAdSettings] = useState<AdSettings | null>(null);
+
   // Call UI State (WebRTC)
   const [callState, setCallState] = useState<{
       isActive: boolean;
@@ -522,9 +525,15 @@ const App: React.FC = () => {
                 }));
             });
 
+            // Ad Settings Subscription
+            const adUnsub = subscribeToAdSettings((settings) => {
+                setAdSettings(settings);
+            });
+
             return () => {
                 callUnsub();
                 prefUnsub();
+                adUnsub();
                 window.removeEventListener('callEnded', handleRemoteHangup);
             };
 
@@ -956,6 +965,33 @@ const App: React.FC = () => {
       }
   };
 
+  const handleDeleteChat = async (id: string) => {
+      if (!currentUser) return;
+      if (confirm("آیا از حذف این گفتگو مطمئن هستید؟")) {
+          // If it's a private chat, we need to calculate the chat ID (uid1_uid2)
+          // If it's a group or channel, the ID is the document ID directly.
+          // We check the contact type to determine this.
+          const contact = contacts.find(c => c.id === id);
+          let targetId = id;
+          
+          if (contact && contact.type === 'user' && contact.id !== 'saved') {
+              targetId = getChatId(currentUser.uid, contact.id);
+          } else if (id === 'saved') {
+              targetId = getChatId(currentUser.uid, 'saved');
+          }
+
+          try {
+              await deleteChat(targetId);
+              if (activeContactId === id) setActiveContactId(null);
+              // Optimistic update
+              setContacts(prev => prev.filter(c => c.id !== id));
+          } catch (e) {
+              console.error("Failed to delete chat", e);
+              alert("خطا در حذف گفتگو.");
+          }
+      }
+  };
+
   if (authLoading) {
       return (
           <div className="h-full flex items-center justify-center bg-white dark:bg-gray-900">
@@ -1052,10 +1088,11 @@ const App: React.FC = () => {
                   }
               }}
               onCreateGroup={handleCreateGroupWrapper}
-              onDeleteChat={(id) => deleteChat(id)}
+              onDeleteChat={handleDeleteChat}
               onPinChat={handleTogglePinChat}
               onArchiveChat={handleToggleArchiveChat}
               onLogout={() => logoutUser(currentUser.uid)}
+              adSettings={adSettings}
           />
        </div>
 
@@ -1099,17 +1136,12 @@ const App: React.FC = () => {
                            if(confirm("آیا از پاک کردن تاریخچه مطمئن هستید؟")) {
                                if (activeContactId === 'global_chat') clearGlobalChat(); 
                                else {
-                                   const chatId = getChatId(currentUser.uid, activeContactId);
+                                   const chatId = getChatId(currentUser.uid, activeContact.id);
                                    clearPrivateChatHistory(chatId);
                                }
                            }
                        }}
-                       onDeleteChat={() => {
-                           if(confirm("آیا از حذف این گفتگو مطمئن هستید؟")) {
-                               deleteChat(activeContact.type === 'user' ? getChatId(currentUser.uid, activeContact.id) : activeContact.id);
-                               setActiveContactId(null);
-                           }
-                       }}
+                       onDeleteChat={() => handleDeleteChat(activeContact.id)}
                        onBlockUser={() => {
                            if (activeContact.type === 'user') {
                                blockUser(currentUser.uid, activeContact.id).then(() => alert("کاربر مسدود شد."));
@@ -1118,6 +1150,7 @@ const App: React.FC = () => {
                        onTyping={(isTyping) => setUserTyping(currentUser.uid, isTyping)}
                        onForwardMessage={handleOpenForward}
                        initialScrollToMessageId={highlightMessageId}
+                       adSettings={adSettings}
                    />
                </motion.div>
            ) : (
